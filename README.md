@@ -35,7 +35,7 @@ sudo bash deploy.sh
 
 脚本会：
 
-1. **首次运行**：提示设置管理员密码；**默认密码为 `rainy`**，直接回车即采用；可设置**浏览器标签页标题**（`PORTAL_TITLE`，也可部署前用环境变量传入）；并自动生成 `JWT_SECRET`、写入 `.env`、创建标记文件 `.homeportal-deploy-init`（仅首次出现向导）。
+1. **首次运行**：提示设置管理员密码（必填，≥8 位；没有默认值）；可设置**浏览器标签页标题**（`PORTAL_TITLE`，也可部署前用环境变量传入）；并自动生成 `JWT_SECRET`、写入 `.env`、创建标记文件 `.homeportal-deploy-init`（仅首次出现向导）。
 2. **非首次**：跳过密码向导，执行 `**pnpm install --prod`**、刷新 systemd 与 Nginx。
 3. 注册并启用 `**home-portal**` systemd 服务（**开机自启**）。
 4. 若已安装 **Nginx**：写入 `sites-available/home-portal`，将 **80 端口**反代到本服务监听端口（默认 `3000`），并禁用默认 `default` 站点（若存在）以避免与 `default_server` 冲突。
@@ -81,8 +81,8 @@ server {
 | ---------------- | ---------------------------- | ----------------- |
 | `PORT`           | 服务监听端口                       | `3000`            |
 | `LISTEN_HOST`    | 监听地址（建议 `127.0.0.1` + Nginx） | `127.0.0.1`（代码默认） |
-| `ADMIN_PASSWORD` | 管理员登录密码                      | `rainy`（生产环境请修改）  |
-| `JWT_SECRET`     | JWT 签名密钥                     | 内置（需修改）           |
+| `ADMIN_PASSWORD` | 管理员登录密码（≥8 位）               | 无，必填；未设置拒绝启动  |
+| `JWT_SECRET`     | JWT 签名密钥（≥32 位随机串）           | 无，必填；未设置拒绝启动  |
 | `PORTAL_TITLE`   | 浏览器标签页 / 站点名称（首页与后台顶栏） | `指引页`             |
 
 

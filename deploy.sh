@@ -363,12 +363,11 @@ fi
 if [ ! -f "$MARKER" ]; then
   echo ""
   echo "========== 首次部署向导 =========="
-  echo "默认管理员密码为 rainy；可直接回车使用默认密码。"
-  echo "建议首次改为强密码。"
+  echo "管理员密码必填：至少 8 位，不能是 rainy（服务启动时会校验，太弱直接拒绝启动）。"
   echo ""
-  read -rsp "请输入管理员密码（留空则使用 rainy）: " HPWD
+  read -rsp "请输入管理员密码: " HPWD
   echo ""
-  [ -z "${HPWD:-}" ] && HPWD=rainy
+  if [ "${#HPWD}" -lt 8 ] || [ "$HPWD" = rainy ]; then echo "✖ 密码太弱：至少 8 位且不能是 rainy" >&2; exit 1; fi
 
   if [ -n "${PORTAL_TITLE:-}" ]; then
     PT_VALUE="$PORTAL_TITLE"

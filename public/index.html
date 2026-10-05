@@ -217,7 +217,7 @@
         tx.querySelectorAll('.sl:not(.out)').forEach(o => { o.style.transform = ''; o.style.opacity = ''; o.style.setProperty('--dx', `${dir * 26}px`); o.classList.add('out'); setTimeout(() => o.remove(), 500); });
         tx.appendChild(sl);
         if (!first) requestAnimationFrame(() => requestAnimationFrame(() => sl.classList.remove('in')));
-        const go = root.querySelector('#go'); go.href = s.url; go.setAttribute('aria-disabled', String(off));
+        const go = root.querySelector('#go'); go.href = /^https?:\/\//i.test(s.url) ? s.url : '#';   // 只放行 http(s)，旧数据里的 javascript: 地址不执行 go.setAttribute('aria-disabled', String(off));
         if (mobile) root.querySelectorAll('.pager i').forEach((d, j) => d.classList.toggle('on', j === i));
         else root.querySelectorAll('.th').forEach((t, j) => { t.classList.toggle('on', j === i); if (j === i) t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
       }
