@@ -90,11 +90,12 @@
     .pc .brandrow { --d: 200ms; } .pc .txt { --d: 350ms; } .pc .acts { --d: 520ms; } .pc .strip, .pc .pager { --d: 700ms; }
 
     /* ================= 手机：同一套单幅，竖排 ================= */
-    .pc.mobile { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+    /* 高度取浏览器实际可见区（dvh）：底部有导航栏 / 工具栏时内容自动让开，按钮不会压在栏下 */
+    .pc.mobile { bottom: auto; height: 100vh; height: 100dvh; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
     .pc.mobile .brandrow { padding: calc(env(safe-area-inset-top) + 14px) 12px 0 22px; }
-    .pc.mobile .art { width: 100%; height: 66%; bottom: auto; }
+    .pc.mobile .art { width: 100%; height: 62%; bottom: auto; }
     .pc.mobile .art::after { inset: 0; background: linear-gradient(180deg, rgba(12, 12, 14, 0) 40%, var(--night) 98%); }
-    .pc.mobile .side { left: 22px; right: 22px; width: auto; top: auto; bottom: calc(env(safe-area-inset-bottom) + 64px); justify-content: flex-end; gap: 20px; }
+    .pc.mobile .side { left: 22px; right: 22px; width: auto; top: auto; bottom: calc(env(safe-area-inset-bottom) + 40px); justify-content: flex-end; gap: 18px; }
     .pc.mobile .sl { gap: 14px; }
     .pc.mobile h1 { font-size: clamp(34px, 10vw, 46px); }
     .pc.mobile .desc { font-size: 15px; min-height: 0; }
@@ -103,7 +104,10 @@
     .pc.mobile .sl.in { transform: translateX(var(--dx, 24px)); }
     .pc.mobile .sl.out { transform: translateX(calc(var(--dx, 24px) * -1)); }
     .pc.mobile .txt.dragging .sl { transition: none; }
-    .pc .pager { position: absolute; left: 22px; bottom: calc(env(safe-area-inset-bottom) + 30px); z-index: 6; display: flex; gap: 6px; }
+    /* 手机叠化不用模糊：大字号文字套 blur 在手机上很贵，是切换时掉帧的来源之一 */
+    .pc.mobile .sl { transition: opacity .4s var(--ease-in-out), transform .4s var(--ease-in-out); }
+    .pc.mobile .sl.in, .pc.mobile .sl.out { filter: none; }
+    .pc .pager { display: flex; gap: 6px; padding-left: 2px; }
     .pc .pager i { width: 5px; height: 5px; border-radius: 9px; background: var(--ink); opacity: .22; transition: opacity .3s var(--ease-in-out), width .3s var(--ease-in-out); }
     .pc .pager i.on { opacity: .9; width: 18px; }
 
@@ -128,7 +132,9 @@
     const { COVER_MODE, kindOf, motifOf, EASE_IN_OUT, spring, loop, liquid, covers } = window.HP;
     /* ---- 可调参数（封面关联方式在 liquid.js 的 COVER_MODE） ---------------------- */
     const MOBILE_QUERY = '(max-width: 760px), (pointer: coarse) and (max-width: 1100px)';
-    const LIQUID_RES = 0.6;          // PC 液体画布分辨率（相对 CSS 像素）：液体本身就柔，0.6 足够且省电
+    const LIQUID_RES = 0.6;          // 液体画布分辨率（相对 CSS 像素）：液体本身就柔，0.6 足够且省电
+    const MOBILE_RES = 0.4;          // 手机再降一档：切换时要同时算两个入口，手机 GPU 吃不消全分辨率
+    const MOBILE_DPR_CAP = 1.25;     // 手机像素比上限（3x 屏按 1.25 算）
     const MIX_MS = 1200;             // 液体换幅时长；文字叠化 0.45s（CSS），先换字、液体再流过去
     const SWIPE_SPAN = 0.85;         // 手机：手指横拖这么多屏宽 = 液体完全流到下一个入口
     const SWIPE_COMMIT = 0.25;       // 松手时（含速度投射）超过这么多屏宽就切过去，否则退回
@@ -176,14 +182,14 @@
     /* ================= 单幅（PC 与手机共用） ================= */
     function mountStage(list, mobile) {
       $('#root').innerHTML = `<div class="pc${mobile ? ' mobile' : ''}">${brand()}<div class="art"><canvas></canvas></div>
-        <div class="side"><div class="txt" id="tx"></div><div class="acts"><a class="btn p" id="go" ${mobile ? '' : 'target="_blank" rel="noopener noreferrer"'}>打开 ${GL.arrow}</a><button class="btn g" id="cp">复制链接</button></div></div>
-        ${mobile ? `<div class="pager">${list.map(() => '<i></i>').join('')}</div>`
+        <div class="side"><div class="txt" id="tx"></div><div class="acts"><a class="btn p" id="go" ${mobile ? '' : 'target="_blank" rel="noopener noreferrer"'}>打开 ${GL.arrow}</a><button class="btn g" id="cp">复制链接</button></div>${mobile ? `<div class="pager">${list.map(() => '<i></i>').join('')}</div>` : ''}</div>
+        ${mobile ? ''
                  : `<nav class="strip" aria-label="全部入口">${list.map((s, i) => `<button class="th" data-i="${i}" aria-label="${esc(s.name)}"><img alt=""></button>`).join('')}</nav>`}</div>`;
       const root = $('.pc'), cv = root.querySelector('canvas'), art = root.querySelector('.art'), tx = root.querySelector('#tx');
       if (!entered) playEnter(root);
-      const fit = () => { const k = Math.min(devicePixelRatio || 1, 1.5) * LIQUID_RES; cv.width = Math.round(art.clientWidth * k); cv.height = Math.round(art.clientHeight * k); };
+      const fit = () => { const k = mobile ? Math.min(devicePixelRatio || 1, MOBILE_DPR_CAP) * MOBILE_RES : Math.min(devicePixelRatio || 1, 1.5) * LIQUID_RES; cv.width = Math.round(art.clientWidth * k); cv.height = Math.round(art.clientHeight * k); };
       fit();
-      const L = liquid(cv);
+      const L = liquid(cv, false, mobile);
       if (!L) console.error('WebGL 不可用：大图不渲染，入口照常可用');
       if (!mobile) covers(list).forEach((src, i) => { if (src) root.querySelectorAll('.th img')[i].src = src; });
       const P = [];                                       // 各入口的 shader 参数，按需算
@@ -272,6 +278,8 @@
 
       const ro = new ResizeObserver(fit); ro.observe(art);
       text(0, 1);
+      // 首屏出来后趁空闲把每个入口的参数（含字形纹理）都备好：滑到哪个都不用现算
+      if (L) { const idle = window.requestIdleCallback || (f => setTimeout(f, 60)); let k = 1; const warm = () => { if (k < list.length) { par(k++); idle(warm); } }; idle(warm); }
       const stop = L ? loop((dt, now) => {
         if (!$('#adminRoute').hidden) return;
         let m = mix;

@@ -55,6 +55,9 @@
     /* ---- 液体 shader：域扭曲噪声 → 铬面色带；意象改形、字形让液面安静 ---- */
     const VERT = 'attribute vec2 a; varying vec2 v; void main(){ v = a * .5 + .5; gl_Position = vec4(a, 0., 1.); }';
     const FRAG = `precision highp float;
+#ifndef OCT
+#define OCT 5
+#endif
 varying vec2 v;
 uniform vec2 uRes; uniform float uTime, uMix;
 uniform vec4 uA, uB; uniform vec3 uTA, uTB; uniform sampler2D uXA, uXB;
@@ -62,7 +65,7 @@ float h(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 3
 float n(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
   return mix(mix(h(i), h(i + vec2(1., 0.)), u.x), mix(h(i + vec2(0., 1.)), h(i + vec2(1., 1.)), u.x), u.y); }
 float fbm(vec2 p) { float s = 0., a = .5; mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
-  for (int i = 0; i < 5; i++) { s += a * n(p); p = m * p; a *= .5; } return s; }
+  for (int i = 0; i < OCT; i++) { s += a * n(p); p = m * p; a *= .5; } return s; }
 vec3 shade(vec2 uv, vec4 P, vec3 tint, sampler2D X) {
   float seed = P.x, motif = P.y, tAmt = P.z, ph = P.w, asp = uRes.x / uRes.y, t = uTime * .025;
   vec2 p = (uv - .5) * vec2(asp, 1.) * 1.7 + seed;
@@ -98,11 +101,12 @@ void main() {
       g.fillText(str, w * 0.56, h * 0.52);
       return c;
     }
-    function liquid(canvas, preserve = false) {
+    /* lite：手机用，噪声少一层（4 档），GPU 每像素少 20% 运算；液体本身柔，看不出差别 */
+    function liquid(canvas, preserve = false, lite = false) {
       const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: preserve });
       if (!gl) return null;
       const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
-      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FRAG)); gl.linkProgram(pr);
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, (lite ? '#define OCT 4\n' : '') + FRAG)); gl.linkProgram(pr);
       if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
       gl.useProgram(pr);
       gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
