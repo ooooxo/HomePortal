@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>对照版 · 入口页「更高级」</title>
+<!--
+  干什么：ooooxo.com 入口页的多档对照。参考 MegD1/Ice-works-showcase 的编辑式排版与「作品即界面」，但不搬它的图片与商业字体。
+         第 0 档 = 现状（public/index.html 原样内嵌）；1–6 档各是一套完整整页方案。
+         已经定下、每档都遵守的：入口数据与行为不变（点开 / 复制链接 / 管理入口）；每个入口一张按名字生成的专属肌理图；系统字体栈、不引外部字体与 CDN。
+  怎么跑：python3 docs/lab/build.py 生成 portal-ice.html（把现行 index.html 内嵌进来），然后 open 它。
+         数字切档 · C 与现状来回对照 · S 换样本（稀 / 中 / 满）· R 换轮次 · P 重播。
+  需要什么：只需浏览器；1–6 档的交互在缩放后的整页画布里同样可用（滚轮 / 拖拽 / 悬停）。
+-->
+<style>
+/* ---- 可调参数 ---------------------------------------------------------- */
+:root {
+  --screen-w: 1440px;   /* 被比较的整页按这个视口画，再整体缩放进舞台 */
+  --screen-h: 880px;
+  /* 实验台自己的色（不是被比较的东西） */
+  --lab-bg: #e9e9ec; --lab-ink: #18181b; --lab-ink-3: #71717a; --lab-ink-4: #a1a1aa; --lab-chip: rgba(0,0,0,.06);
+  --lab-accent: #0284c7; --lab-warn: #b45309;
+  --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+  /* 被比较的方案共用的两套纸：参考站的近白纸 + 墨，与 ReleaseHub 的暗面 */
+  --paper: #f7f7f5; --paper-ink: #0b0b0c; --paper-ink-2: #55555c; --paper-ink-3: #a3a3aa; --paper-line: rgba(11,11,12,.1);
+  --night: #0c0c0e; --night-ink: #f2f3f5; --night-ink-2: #9ba1ac; --night-ink-3: #5d646f; --night-line: rgba(242,243,245,.09);
+  --sky: #38bdf8;
+  /* 缓动按用途挑，从不线性：A→B 换内容 / 换位用 in-out，出现消失用 out，悬停换色用 hover，手机手感用弹簧 */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --ease-hover: cubic-bezier(0.4, 0, 0.2, 1); --spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font-family: var(--font); background: var(--lab-bg); color: var(--lab-ink); display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+
+/* ================= 实验台 ================= */
+.lab { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 14px 24px 10px; }
+.lab-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lab h1 { margin: 0; font-size: 15px; font-weight: 650; white-space: nowrap; }
+.pick { display: flex; flex-wrap: wrap; gap: 2px; }
+.pick button { height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: none; font-size: 13px; color: var(--lab-ink-3); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.pick button b { font-family: var(--mono); font-weight: 450; color: var(--lab-ink-4); }
+.pick button:hover { background: var(--lab-chip); color: var(--lab-ink); }
+.pick button[aria-pressed="true"] { color: var(--lab-ink); font-weight: 650; }
+.pick button[aria-pressed="true"] b { color: var(--lab-accent); }
+.lab-sep { width: 1px; height: 14px; margin: 0 6px; background: rgba(0,0,0,.15); align-self: center; }
+.lab-sp { flex: 1; }
+.keys { font-size: 12px; color: var(--lab-ink-4); white-space: nowrap; }
+.keys kbd { font-family: var(--mono); padding: 0 4px; border-radius: 4px; background: var(--lab-chip); color: var(--lab-ink-3); }
+.lab-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 22px; }
+.thesis { font-size: 14px; font-weight: 650; margin-right: 4px; }
+.part { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--lab-chip); font-size: 12px; color: #3f3f46; }
+.part i { font-style: normal; color: var(--lab-ink-4); }
+.cost { font-size: 12px; color: var(--lab-warn); }
+.stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 4px 24px 20px; }
+.frame { position: relative; overflow: hidden; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); background: #000; }
+.frame.bare { overflow: visible; border-radius: 0; box-shadow: none; background: none; }
+.frame.bare .dev.pc { box-shadow: 0 20px 60px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); }
+.screen { position: absolute; left: 0; top: 0; width: var(--screen-w); height: var(--screen-h); transform-origin: 0 0; overflow: hidden; }
+.screen iframe { width: 100%; height: 100%; border: 0; display: block; }
+.lab-toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); padding: 8px 14px; border-radius: 9px; background: #18181b; color: #fff; font-size: 13px; opacity: 0; transition: opacity .2s var(--ease-out); pointer-events: none; z-index: 9; }
+.lab-toast.show { opacity: 1; }
+
+/* ================= 被比较的方案共用的零件 ================= */
+.pg { position: absolute; inset: 0; font-family: var(--font); -webkit-font-smoothing: antialiased; user-select: none; }
+.pg.paper { background: var(--paper); color: var(--paper-ink); --ink: var(--paper-ink); --ink-2: var(--paper-ink-2); --ink-3: var(--paper-ink-3); --line: var(--paper-line); }
+.pg.night { background: var(--night); color: var(--night-ink); --ink: var(--night-ink); --ink-2: var(--night-ink-2); --ink-3: var(--night-ink-3); --line: var(--night-line); }
+.pg a { color: inherit; text-decoration: none; }
+.art { display: block; width: 100%; height: 100%; object-fit: cover; }
+.brandrow { position: absolute; left: 48px; right: 48px; top: 32px; display: flex; align-items: center; gap: 14px; z-index: 5; font-size: 14px; }
+.brandrow .wm { font-weight: 700; letter-spacing: -0.01em; }
+.brandrow .sub { color: var(--ink-3); }
+.brandrow .sp { flex: 1; }
+.brandrow .gl { width: 34px; height: 34px; display: grid; place-items: center; color: var(--ink-3); border: 0; background: none; cursor: pointer; }
+.brandrow .gl:hover { color: var(--ink); }
+.brandrow .gl svg { width: 17px; height: 17px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.k-app { --kc: #0ea5e9; } .k-res { --kc: #10b981; } .k-site { --kc: #6366f1; }
+.night .k-app { --kc: #38bdf8; } .night .k-res { --kc: #34d399; } .night .k-site { --kc: #818cf8; }
+.kdot::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 99px; background: var(--kc); margin-right: 8px; vertical-align: 2px; }
+.tagpill { position: absolute; z-index: 20; pointer-events: none; height: 40px; padding: 0 16px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: #fff; background: rgba(11,11,12,.55); backdrop-filter: blur(10px) saturate(1.4); -webkit-backdrop-filter: blur(10px) saturate(1.4); box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); transform: translate(-50%, -50%) scale(.6); opacity: 0; transition: opacity .2s var(--ease-out), transform .25s var(--ease-out); }
+.tagpill.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+/* ---- 第二轮：PC 与手机并排 ---- */
+.duo { position: absolute; inset: 0; display: flex; align-items: center; gap: 70px; }
+.dev { position: relative; flex: none; overflow: hidden; }
+.dev.pc { width: 1440px; height: 880px; border-radius: 10px; }
+.dev.phone { width: 390px; height: 844px; border-radius: 46px; box-shadow: 0 0 0 11px #1c1c1f, 0 0 0 12px #3a3a3f; }
+.v3 .art-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.v3 .txt { display: grid; }
+.v3 .txt .sl { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 18px; transition: opacity .45s var(--ease-in-out), transform .45s var(--ease-in-out), filter .45s var(--ease-in-out); }
+.v3 .txt .sl.in { opacity: 0; transform: translateY(12px); filter: blur(6px); }
+.v3 .txt .sl.out { opacity: 0; transform: translateY(-10px); filter: blur(6px); pointer-events: none; }
+.v3 .motif { font-size: 12px; color: var(--ink-3); letter-spacing: .02em; }
+.v3 .motif b { font-weight: 500; color: var(--ink-2); }
+.rp .gl { transition: transform .32s var(--spring-soft), color .2s var(--ease-hover); }
+.rp .gl:active { transform: scale(.84); transition-duration: .08s; }
+.rp .brandrow { left: 0; right: 0; top: 0; padding: 50px 14px 34px 22px; z-index: 150; background: linear-gradient(var(--paper) 55%, rgba(247,247,245,0)); }
+.rp .card { position: absolute; left: 0; top: 0; width: 250px; height: 167px; margin: -83.5px 0 0 -125px; border-radius: 8px; overflow: hidden; will-change: transform; }
+.rp .card.dim .art { filter: brightness(.86); }
+/* 底部信息区是一片纸：卡片从它底下转过去，名字永远不被盖住 */
+.rp .meta { position: absolute; left: 0; right: 0; bottom: 0; z-index: 150; display: flex; flex-direction: column; gap: 8px; padding: 70px 22px 44px; background: linear-gradient(rgba(247,247,245,0), var(--paper) 42%); }
+.rp .meta .row1 { display: flex; align-items: baseline; gap: 14px; }
+.rp .meta .num { font-size: 13px; color: var(--ink-3); }
+.rp .meta .nm { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
+.rp .meta .row2 { display: flex; gap: 14px; font-size: 13px; color: var(--ink-2); padding-left: 1px; }
+.rp .meta .swap { display: inline-block; transition: filter .45s var(--ease-in-out), opacity .45s var(--ease-in-out); }
+.rp .meta .swap.out { filter: blur(8px); opacity: 0; }
+.rp .hint { position: absolute; left: 22px; bottom: 16px; font-size: 11px; color: var(--ink-3); z-index: 151; }
+.rp .dots { position: absolute; right: 16px; top: 40%; transform: translateY(-50%); z-index: 151; display: flex; flex-direction: column; gap: 6px; }
+.rp .dots i { width: 4px; height: 4px; border-radius: 9px; background: var(--ink); opacity: .18; transition: opacity .3s var(--ease-in-out), height .3s var(--ease-in-out); }
+.rp .dots i.on { opacity: .9; height: 14px; }
+
+/* ---- 1 环 ---- */
+.v1 .ring { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.v1 .card { position: absolute; left: 0; top: 0; width: 400px; height: 267px; margin: -133.5px 0 0 -200px; border-radius: 10px; overflow: hidden; cursor: pointer; will-change: transform; box-shadow: 0 0 0 1px rgba(0,0,0,.04); }
+.v1 .card .art { transition: filter .3s var(--ease-hover); }
+.v1 .card.dim .art { filter: brightness(.86) saturate(.8); }
+.v1 .metaL, .v1 .metaR { position: absolute; top: 50%; transform: translateY(-50%); display: flex; align-items: baseline; gap: 4.7vw; z-index: 4; font-size: 24px; letter-spacing: -0.01em; }
+.v1 .metaL { left: 5.5%; gap: 60px; } .v1 .metaR { right: 5.5%; gap: 52px; }
+.v1 .metaL .num, .v1 .metaR .num { font-size: 16px; }
+.v1 .metaL .nm { font-size: 30px; font-weight: 500; max-width: 300px; }
+.v1 .swap { display: inline-block; transition: filter .45s var(--ease-in-out), opacity .45s var(--ease-in-out); }
+.v1 .swap.out { filter: blur(8px); opacity: 0; }
+/* 索引是一扇固定高的窗：条目多时跟着当前项滚，永远停在右侧信息上方，不和它撞 */
+.v1 .index { position: absolute; right: 12%; top: 92px; z-index: 4; height: 220px; overflow: hidden; font-size: 13px; line-height: 1.4; mask: linear-gradient(transparent, #000 14%, #000 86%, transparent); -webkit-mask: linear-gradient(transparent, #000 14%, #000 86%, transparent); }
+.v1 .index .rail { display: flex; flex-direction: column; gap: 3px; padding: 26px 0; transition: transform .5s var(--ease-in-out); }
+.v1 .index span { opacity: .22; } .v1 .index span.on { opacity: 1; }
+.v1 .hint { position: absolute; left: 48px; bottom: 30px; z-index: 4; font-size: 12px; color: var(--ink-3); }
+.v1 .glass { position: absolute; left: 0; right: 0; height: 8%; z-index: 3; pointer-events: none; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.v1 .glass.t { top: 0; mask: linear-gradient(#000, transparent); -webkit-mask: linear-gradient(#000, transparent); }
+.v1 .glass.b { bottom: 0; mask: linear-gradient(transparent, #000); -webkit-mask: linear-gradient(transparent, #000); }
+
+/* ---- 2 索引 ---- */
+.v2 { overflow-y: auto; }
+.v2 .hero { padding: 132px 48px 36px; display: flex; align-items: flex-end; gap: 24px; }
+.v2 .hero h1 { margin: 0; font-size: 15px; font-weight: 500; color: var(--ink-2); max-width: 420px; line-height: 1.6; }
+.v2 .hero .cnt { margin-left: auto; font-size: 13px; color: var(--ink-3); }
+.v2 ol { list-style: none; margin: 0; padding: 0 48px 120px; }
+.v2 li { position: relative; display: grid; grid-template-columns: 72px 1fr auto 140px; align-items: baseline; gap: 24px; padding: 18px 0 16px; border-top: 1px solid var(--line); cursor: pointer; transition: opacity .3s var(--ease-hover); }
+.v2 li:last-child { border-bottom: 1px solid var(--line); }
+.v2 ol:hover li { opacity: .25; } .v2 ol li:hover { opacity: 1; }
+.v2 .nm { font-size: 76px; line-height: 1; font-weight: 600; letter-spacing: -0.045em; transition: transform .45s var(--ease-out); }
+.v2 li:hover .nm { transform: translateX(14px); }
+.v2 .num { font-size: 14px; color: var(--ink-3); }
+.v2 .kind { font-size: 14px; color: var(--ink-2); }
+.v2 .tg { font-size: 14px; color: var(--ink-3); text-align: right; }
+.v2 .float { position: absolute; left: 0; top: 0; width: 340px; height: 227px; border-radius: 10px; overflow: hidden; pointer-events: none; z-index: 6; opacity: 0; transform-origin: 50% 50%; box-shadow: 0 30px 60px rgba(0,0,0,.18); transition: opacity .25s var(--ease-out); }
+.v2 .float.on { opacity: 1; }
+
+/* ---- 3 单幅 ---- */
+.v3 .art-wrap { position: absolute; right: 0; top: 0; bottom: 0; width: 62%; overflow: hidden; }
+.v3 .art-wrap .layer { position: absolute; inset: 0; transition: opacity .9s var(--ease-in-out), transform 1.6s var(--ease-in-out), filter .9s var(--ease-in-out); }
+.v3 .art-wrap .layer.leave { opacity: 0; transform: scale(1.06); filter: blur(12px); }
+/* 遮罩从一段实底起、并往左多盖 2px：画布左缘落在小数像素上，会抗锯齿出一道亮线 */
+.v3 .art-wrap::after { content: ''; position: absolute; inset: 0 0 0 -2px; background: linear-gradient(90deg, var(--night) 0%, var(--night) 3%, rgba(12,12,14,.0) 32%); pointer-events: none; }
+.v3 .side { position: absolute; left: 48px; top: 0; bottom: 0; width: 34%; display: flex; flex-direction: column; justify-content: center; gap: 18px; z-index: 3; }
+.v3 .count { font-size: 14px; color: var(--ink-3); }
+.v3 .count b { color: var(--ink); font-weight: 500; }
+.v3 h2 { margin: 0; font-size: 84px; line-height: 1; font-weight: 650; letter-spacing: -0.045em; }
+.v3 .desc { font-size: 16px; color: var(--ink-2); min-height: 26px; max-width: 380px; }
+.v3 .chips { display: flex; gap: 8px; }
+.v3 .chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: rgba(255,255,255,.07); color: var(--ink-2); }
+.v3 .chip.k { color: var(--kc); background: color-mix(in srgb, var(--kc) 14%, transparent); }
+.v3 .acts { display: flex; gap: 10px; margin-top: 10px; }
+.v3 .btn { height: 44px; padding: 0 20px; border-radius: 22px; border: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.v3 .btn.p { background: var(--ink); color: var(--night); }
+.v3 .btn.g { background: rgba(255,255,255,.06); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.v3 .strip { position: absolute; left: 48px; bottom: 32px; z-index: 4; display: flex; gap: 8px; max-width: calc(100% - 96px); overflow: hidden; }
+.v3 .th { flex: none; width: 76px; height: 50px; border-radius: 6px; overflow: hidden; opacity: .4; cursor: pointer; outline: 1px solid transparent; outline-offset: 3px; transition: opacity .25s var(--ease-hover), outline-color .25s var(--ease-hover); }
+.v3 .th:hover { opacity: .8; } .v3 .th.on { opacity: 1; outline-color: rgba(255,255,255,.6); }
+
+/* ---- 4 凝结 ---- */
+.v4 { overflow-y: auto; }
+.v4 .hero { padding: 120px 48px 32px; }
+.v4 .hero canvas { display: block; }
+.v4 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 0 48px 80px; }
+.v4 .tile { position: relative; cursor: pointer; }
+.v4 .tile canvas { display: block; width: 100%; aspect-ratio: 3 / 2; border-radius: 10px; background: #111114; }
+.v4 .cap { display: flex; align-items: baseline; gap: 12px; padding: 12px 2px 0; font-size: 15px; }
+.v4 .cap .num { font-size: 12px; color: var(--ink-3); }
+.v4 .cap .nm { font-weight: 600; }
+.v4 .cap .kind { margin-left: auto; font-size: 12px; color: var(--ink-2); }
+
+/* ---- 5 目录册 ---- */
+.v5 { overflow-y: auto; }
+.v5 .mast { padding: 120px 48px 40px; display: grid; grid-template-columns: repeat(12, 1fr); gap: 0 24px; align-items: end; border-bottom: 1px solid var(--line); margin: 0 48px; padding-left: 0; padding-right: 0; }
+.v5 .mast h1 { grid-column: 1 / 8; margin: 0; font-size: 132px; line-height: .86; font-weight: 700; letter-spacing: -0.06em; }
+.v5 .mast p { grid-column: 9 / 13; margin: 0 0 10px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.v5 .cat { display: grid; grid-template-columns: repeat(12, 1fr); gap: 40px 24px; padding: 40px 48px 120px; }
+.v5 .it { grid-column: span 4; cursor: pointer; }
+.v5 .it.lead { grid-column: span 8; grid-row: span 2; }
+.v5 .ph { position: relative; aspect-ratio: 3 / 2; border-radius: 4px; overflow: hidden; background: #ddd; }
+.v5 .ph .drift { position: absolute; inset: -12%; animation: drift 26s ease-in-out infinite alternate; }
+.v5 .it:hover .drift { animation-duration: 9s; }
+@keyframes drift { to { transform: translate(6%, -5%) rotate(2deg) scale(1.04); } }
+.v5 .cap { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: baseline; padding-top: 12px; border-top: 1px solid var(--paper-ink); margin-top: 12px; font-size: 14px; }
+.v5 .cap .num { font-size: 12px; color: var(--ink-3); }
+.v5 .cap .nm { font-weight: 600; font-size: 16px; }
+.v5 .cap .r { font-size: 12px; color: var(--ink-2); text-align: right; }
+.v5 .cap .d { grid-column: 2 / 4; color: var(--ink-2); font-size: 13px; }
+.v5 .lead .cap .nm { font-size: 28px; letter-spacing: -0.02em; }
+
+/* ---- 6 横带 ---- */
+.v6 .track { position: absolute; left: 0; top: 50%; height: 52%; transform: translateY(-56%); display: flex; gap: 28px; padding-left: 48px; will-change: transform; }
+.v6 .slot { flex: none; height: 100%; aspect-ratio: 3 / 2; cursor: pointer; display: flex; flex-direction: column; gap: 14px; }
+.v6 .slot .ph { flex: 1; border-radius: 8px; overflow: hidden; transform-origin: 50% 50%; will-change: transform; }
+.v6 .slot .cap { display: flex; align-items: baseline; gap: 14px; font-size: 15px; }
+.v6 .slot .cap .num { font-size: 12px; color: var(--ink-3); }
+.v6 .slot .cap .nm { font-weight: 600; }
+.v6 .slot .cap .kind { margin-left: auto; font-size: 12px; color: var(--ink-2); }
+.v6 .big { position: absolute; left: 48px; bottom: 34px; font-size: 96px; line-height: .8; font-weight: 700; letter-spacing: -0.05em; }
+.v6 .big small { font-size: 24px; color: var(--ink-3); letter-spacing: 0; font-weight: 500; }
+.v6 .prog { position: absolute; left: 340px; right: 48px; bottom: 44px; height: 1px; background: var(--line); }
+.v6 .prog i { position: absolute; left: 0; top: -1px; height: 3px; background: var(--ink); width: 10%; }
+</style>
+</head>
+<body>
+<header class="lab">
+  <div class="lab-top">
+    <h1>入口页「更高级」· 对照版</h1>
+    <div class="pick" id="pick"></div>
+    <span class="lab-sep"></span>
+    <div class="pick" id="spick"></div>
+    <span class="lab-sp"></span>
+    <span class="keys"><kbd>数字</kbd> 切档 <kbd>C</kbd> 对照现状 <kbd>S</kbd> 样本 <kbd>R</kbd> 轮次 <kbd>P</kbd> 重播</span>
+  </div>
+  <div class="lab-note" id="note"></div>
+</header>
+<main class="stage" id="stage"><div class="frame" id="frame"><div class="screen" id="screen"></div></div></main>
+<div class="lab-toast" id="toast"></div>
+
+<script>
+/* 现行 public/index.html 原文，由 build.py 注入；第 0 档用它，保证现状是真的现状 */
+const CURRENT_HTML = /*__CURRENT_HTML__*/"";
+
+/* ---- 样本：照 data/services.json 的真形状；中 = 线上 6 条原样，稀 = 2 条，满 = 18 条（12 条为预演的未来入口） ---- */
+const REAL = [
+  { id: 'a', name: '数据交换中心', url: 'https://www.ooooxo.com/releasehub/', displayUrl: '', description: '这里是数据交换中心', tags: [], status: 'active', color: '#c8ff00' },
+  { id: 'b', name: 'Morii', url: 'https://www.ooooxo.com/releasehub/app/morii/latest', displayUrl: 'V0.9.0', description: '一个真正的好用的日志软件', tags: [], status: 'active', color: '#c8ff00' },
+  { id: 'c', name: '通用资源库', url: 'https://www.ooooxo.com/releasehub/r/public', displayUrl: '', description: '', tags: [], status: 'active', color: '#c8ff00' },
+  { id: 'd', name: 'Kero', url: 'https://www.ooooxo.com/releasehub/app/Kero/latest', displayUrl: '非常好用', description: '', tags: [], status: 'active', color: '#c8ff00' },
+  { id: 'e', name: 'Kero企业版', url: 'https://www.ooooxo.com/releasehub/app/KeroCom/latest', displayUrl: 'kero', description: '', tags: [], status: 'active', color: '#c8ff00' },
+  { id: 'f', name: '叩叩', url: 'https://www.ooooxo.com/releasehub/app/knockknock/latest', displayUrl: '', description: '叩叩', tags: [], status: 'active', color: '#c8ff00' },
+];
+const FUTURE = ['Coffice', 'IssueCenter', '临时文件', '日志中心', 'Hrige', '镜像站', 'Morii Card', '字体库', '设计稿', '周报', '监控面板', '下载站']
+  .map((n, i) => ({ id: 'x' + i, name: n, url: `https://www.ooooxo.com/releasehub/${i % 3 ? 'app/' + n : 'r/' + n}`, displayUrl: i % 4 === 0 ? 'V1.' + i + '.0' : '', description: i % 2 ? '' : '预演条目：看 18 个时版式是否还站得住', tags: [], status: i === 7 ? 'inactive' : 'active', color: '#c8ff00' }));
+const SPECS = [
+  { key: '稀', note: '2 个入口', list: REAL.slice(0, 2) },
+  { key: '中', note: '线上现在的 6 个', list: REAL },
+  { key: '满', note: '18 个（含 12 个预演）', list: [...REAL, ...FUTURE] },
+];
+
+/* ---- 共用：类型、编号、按名字生成的肌理图 ---- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const kindOf = u => /\/app\//.test(u) ? { cls: 'k-app', label: '应用' } : /\/r\//.test(u) ? { cls: 'k-res', label: '资源库' } : { cls: 'k-site', label: '站点' };
+const no = i => String(i + 1).padStart(2, '0');
+function hash(s) { let h = 2166136261; for (const ch of s) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+/* 液态金属：域扭曲噪声（噪声套噪声两层，形状像流动的液体）→ 余弦色带做铬面反光 → 墨与米白两色为主，
+   高光里掺一点按类型的色相。画在 360×240 的画布上，浏览器放大时自然柔化，正适合液体。 */
+const ART_W = 360, ART_H = 240;
+const HL = { 'k-app': [150, 205, 255], 'k-res': [150, 235, 200], 'k-site': [185, 180, 255] };
+function makeNoise(seed) {
+  const P = new Uint8Array(512); const perm = [...Array(256).keys()];
+  let x = seed || 1; const rnd = () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return (x >>> 0) / 4294967296; };
+  for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i < 512; i++) P[i] = perm[i & 255];
+  const G = [...Array(256)].map(() => rnd());
+  const fade = t => t * t * (3 - 2 * t);
+  const n2 = (px, py) => {
+    const xi = Math.floor(px), yi = Math.floor(py), xf = px - xi, yf = py - yi, X = xi & 255, Y = yi & 255;
+    const a = G[P[P[X] + Y]], b = G[P[P[X + 1] + Y]], c = G[P[P[X] + Y + 1]], d = G[P[P[X + 1] + Y + 1]];
+    const u = fade(xf), v = fade(yf);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  return (px, py) => { let s = 0, amp = 0.5, f = 1; for (let o = 0; o < 4; o++) { s += amp * n2(px * f, py * f); f *= 2.02; amp *= 0.5; } return s; };
+}
+function renderArt(s) {
+  const H = hash(s.name), fbm = makeNoise(H), k = kindOf(s.url).cls, hl = HL[k];
+  const c = document.createElement('canvas'); c.width = ART_W; c.height = ART_H;
+  const g = c.getContext('2d'), im = g.createImageData(ART_W, ART_H), d = im.data;
+  const sc = 1.15 + (H % 7) * 0.09, ph = (H % 1000) / 1000, warp = 2.6 + ((H >> 10) % 5) * 0.3;
+  for (let y = 0; y < ART_H; y++) for (let x = 0; x < ART_W; x++) {
+    const px = x / ART_H * sc, py = y / ART_H * sc;
+    const qx = fbm(px, py), qy = fbm(px + 5.2, py + 1.3);
+    const rx = fbm(px + warp * qx + 1.7, py + warp * qy + 9.2), ry = fbm(px + warp * qx + 8.3, py + warp * qy + 2.8);
+    const v = fbm(px + warp * rx, py + warp * ry);
+    // 铬面：把连续值折成几条高光带，再用幂次收窄，暗部留墨
+    const band = 0.5 + 0.5 * Math.cos(6.2832 * (v * 1.7 + ph));
+    const L = Math.pow(band, 1.7), spec = Math.pow(band, 12);
+    const i = (y * ART_W + x) * 4;
+    const ink = [11, 11, 13], cream = [233, 228, 218];
+    const tint = Math.min(1, rx * 1.4) * 0.55;
+    for (let ch = 0; ch < 3; ch++) {
+      const base = ink[ch] + (cream[ch] - ink[ch]) * L;
+      d[i + ch] = base * (1 - spec * tint) + hl[ch] * spec * tint;
+    }
+    d[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  return c.toDataURL('image/png');
+}
+const artCache = new Map();
+function artURL(s) { if (!artCache.has(s.name)) artCache.set(s.name, renderArt(s)); return artCache.get(s.name); }
+const artImg = s => `<img class="art" src="${artURL(s)}" alt="" draggable="false">`;
+const GL = {
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg>',
+  arrow: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>',
+};
+const brand = (sub = '') => `<div class="brandrow"><span class="wm">ooooxo</span>${sub ? `<span class="sub">${sub}</span>` : ''}<span class="sp"></span><button class="gl" data-act="share" aria-label="复制本页链接">${GL.link}</button><button class="gl" data-act="admin" aria-label="管理">${GL.gear}</button></div>`;
+const open = s => toast(`打开 ${s.name} → ${s.url.replace(/^https?:\/\//, '')}`);
+
+/* JS 补间也不许线性：液体换幅是 A→B，用与 CSS --ease-in-out 同一条曲线（cubic-bezier 解 x→t 再取 y） */
+function bezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  return p => { if (p <= 0) return 0; if (p >= 1) return 1; let t = p;
+    for (let i = 0; i < 8; i++) { const e = ((ax * t + bx) * t + cx) * t - p, d = (3 * ax * t + 2 * bx) * t + cx; if (Math.abs(e) < 1e-5 || Math.abs(d) < 1e-6) break; t -= e / d; }
+    return ((ay * t + by) * t + cy) * t; };
+}
+const EASE_IN_OUT = bezier(0.77, 0, 0.175, 1);
+/* 弹簧：k 刚度、z 阻尼比 */
+const spring = (p, to, k, z, dt) => { p.v += (-k * (p.x - to) - 2 * z * Math.sqrt(k) * p.v) * dt; p.x += p.v * dt; };
+/* 每个方案自己的帧循环；卸载时一并停 */
+function loop(tick) {
+  let on = true, last = performance.now();
+  const f = t => { if (!on) return; const dt = Math.min(1 / 30, (t - last) / 1000); last = t; tick(dt, t); requestAnimationFrame(f); };
+  requestAnimationFrame(f);
+  return () => { on = false; };
+}
+/* 屏幕被整体缩放：指针坐标要换回整页坐标 */
+function local(root, e) { const r = root.getBoundingClientRect(), k = r.width / root.offsetWidth; return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k }; }
+
+/* ================= 方案 ================= */
+const V = {};
+
+/* 1 环：一圈作品大部分在屏外，只有一段弧扫过画面；滚轮 / 拖拽带惯性，停下吸附到最近一格 */
+/* 环的运动核心：桌面与手机共用，几何由 geo 给（视口、半径、圆心、每格角度、拖拽灵敏度）。
+   geo.paged（手机）滚动手感照 WWDC18「Designing Fluid Interfaces」：
+   拖的时候 1:1 跟手、零阻尼；松手按减速率把落点「投射」出去，吸到离投射点最近的一格，
+   再用弹簧从松手速度接力落定（不在松手那一刻断速度）；两端橡皮筋。阻尼感只在松手后的自然惯性里。 */
+function ringRun(root, S, geo, onMeta) {
+  const pg = root.querySelector('.pg'), cards = [...pg.querySelectorAll('.card')], n = cards.length;
+  const { R, cx, cy, deg, drag: sens } = geo;
+  const step = n * deg >= 360 ? 360 / n : deg, loopRing = n * deg >= 360;
+  const rot = { x: 0, v: 0 }; let target = null, drag = null, wheel = null, cur = -1, hover = -1;
+  const paged = !!geo.paged, snapAt = a => Math.round(a / step) * step, minA = -(n - 1) * step;
+  const clampT = t => (loopRing ? t : Math.max(minA, Math.min(0, t)));
+
+  // ---- 手机滚动参数 ----
+  const DECEL = 0.995;                                    // 每毫秒保留的速度比例：苹果默认 0.998（滑得远）、0.99（利落）；取中间 = 惯性带阻尼
+  const project = v => (v / 1000) * DECEL / (1 - DECEL); // 松手速度（度/秒）→ 还能滑多少度
+  const SNAP_K = (2 * Math.PI / 0.38) ** 2, SNAP_Z = 0.8; // 落定弹簧：response 0.38s、damping 0.8（带惯性来的，允许一丝回弹）
+  const rubber = (over, dim) => (over * dim * 0.55) / (dim + 0.55 * Math.abs(over));   // 超出两端：越拉越拉不动
+  const band = x => (loopRing ? x : x > 0 ? rubber(x, step * 2) : x < minA ? minA + rubber(x - minA, step * 2) : x);
+  const track = (st, raw) => { const t = performance.now(); st.samples.push({ t, x: raw }); while (st.samples.length > 2 && t - st.samples[0].t > 100) st.samples.shift(); };
+  const releaseV = st => {                                 // 最近 100ms 的位移 / 时间；手停住超过 80ms 再松开 = 没有惯性
+    const a = st.samples[0], b = st.samples[st.samples.length - 1];
+    if (!a || !b || b.t === a.t || performance.now() - b.t > 80) return 0;
+    return (b.x - a.x) / ((b.t - a.t) / 1000);
+  };
+  function release(st) {                                   // 拖 / 滚结束：投射落点 → 吸最近一格 → 弹簧接力
+    const v = releaseV(st);
+    target = clampT(snapAt(rot.x + project(v)));
+    rot.v = v;
+  }
+
+  // 手机的点按手感：弹簧驱动。按下收缩变暗、松开回弹；点正中那张先放大铺满再打开
+  const press = cards.map(() => ({ x: 0, v: 0 })), pressTo = cards.map(() => 0);
+  const opening = { x: 0, v: 0 }; let openTo = 0, openIdx = -1;
+  const tag = pg.querySelector('.tagpill');
+  const idxOf = () => { const k = Math.round(-rot.x / step); return loopRing ? ((k % n) + n) % n : Math.max(0, Math.min(n - 1, k)); };
+
+  const stop = loop(dt => {
+    if (paged) {
+      if (!drag && !wheel) spring(rot, target ?? snapAt(rot.x), SNAP_K, SNAP_Z, dt);
+      spring(opening, openTo, 110, 0.82, dt); if (openTo === 0 && opening.x < 0.005) openIdx = -1;
+    } else if (!drag) {
+      rot.v *= Math.pow(0.04, dt);
+      if (Math.abs(rot.v) < 18 && target === null) target = snapAt(rot.x);
+      if (target !== null) spring(rot, clampT(target), 90, 0.85, dt); else rot.x += rot.v * dt;
+    }
+    const o = Math.max(0, Math.min(1, opening.x));
+    cards.forEach((c, i) => {
+      let a = i * step + rot.x; if (loopRing) a = ((a + 180) % 360 + 360) % 360 - 180;
+      const rad = a * Math.PI / 180;
+      let x = cx + Math.cos(rad) * R, y = cy + Math.sin(rad) * R;
+      const lift = !paged && i === hover ? 1.06 : 1, stretch = 1 + Math.min(0.12, Math.abs(rot.v) / 900);   // 手机没有悬停，只有按压
+      let sc = lift;   // 不缩小：卡要贴着排，缩了缝就拉开
+      if (paged) {
+        const off = Math.min(1, Math.abs(a) / step);   // 0 = 正位，1 = 离开一整格
+        spring(press[i], pressTo[i], 520, 0.5, dt);
+        const p = press[i].x; sc *= 1 - p * 0.06;
+        if (i === openIdx) { x += (geo.W / 2 - x) * o; y += (geo.H * 0.46 - y) * o; a *= 1 - o; sc *= 1 + o * 2.1; }
+        c.style.opacity = String((1 - off * 0.25) * (openIdx >= 0 && i !== openIdx ? 1 - o : 1));
+        c.style.filter = p > 0.01 ? `brightness(${1 - p * 0.16})` : '';
+      }
+      c.style.transform = `translate(${x}px, ${y}px) rotate(${a}deg) scale(${sc * stretch}, ${sc / stretch})`;
+      c.classList.toggle('dim', !paged && hover >= 0 && i !== hover);
+      c.style.zIndex = i === openIdx && o > 0.01 ? '999' : String(100 - Math.round(Math.abs(a)));
+    });
+    const i = idxOf(); if (i !== cur) { cur = i; onMeta(i); }
+  });
+
+  pg.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (!paged) { target = null; rot.v -= (e.deltaY + e.deltaX) * 0.9; return; }
+    if (openTo) return;
+    // 滚轮 / 触控板同样 1:1 跟手（触控板自带系统惯性，照单全收）；停下 120ms 后按同一套投射吸附
+    if (!wheel) { wheel = { raw: rot.x, samples: [] }; target = null; rot.v = 0; }
+    wheel.raw -= (e.deltaY + e.deltaX) * sens;
+    rot.x = band(wheel.raw); track(wheel, wheel.raw);
+    clearTimeout(wheel.idle);
+    wheel.idle = setTimeout(() => { const w = wheel; wheel = null; release(w); }, 120);
+  }, { passive: false });
+  pg.addEventListener('pointerdown', e => {
+    if (openTo) return;
+    // 按下即打断正在进行的吸附 / 惯性（从屏上当前位置接手，不跳）
+    drag = { y: local(pg, e).y, raw0: rot.x, moved: 0, samples: [] }; rot.v = 0; target = null; track(drag, rot.x);
+    const card = e.target.closest?.('.card'); if (paged && card) pressTo[Number(card.dataset.i)] = 1;
+  });
+  pg.addEventListener('pointermove', e => {
+    const p = local(pg, e);
+    if (drag) {
+      const d = p.y - drag.y; drag.moved = Math.max(drag.moved, Math.abs(d));
+      if (drag.moved > 6) pressTo.fill(0);   // 一拖动就不再算「按」
+      const raw = drag.raw0 + d * sens;
+      if (paged) { rot.x = band(raw); track(drag, raw); }          // 1:1 跟手，两端橡皮筋
+      else { rot.v = (raw - rot.x) * 60; rot.x = raw; }
+    }
+    const card = e.target.closest?.('.card'); hover = card ? Number(card.dataset.i) : -1;
+    if (tag) { tag.classList.toggle('on', !!card && Number(card.dataset.i) === cur); tag.style.left = p.x + 'px'; tag.style.top = p.y + 'px'; }
+  });
+  pg.addEventListener('pointerup', e => {
+    if (!drag) return; const st = drag; drag = null; pressTo.fill(0);
+    const card = e.target.closest?.('.card');
+    if (st.moved < 4 && card) {
+      const i = Number(card.dataset.i);
+      if (i !== cur) { target = clampT(st.raw0 + snapAt(-i * step - st.raw0)); return; }
+      if (!paged) { open(S.list[i]); return; }
+      openIdx = i; openTo = 1;                                  // 放大铺满 → 打开；对照页里没有真跳转，演示完退回
+      setTimeout(() => { open(S.list[i]); setTimeout(() => { openTo = 0; }, 650); }, 420);
+      return;
+    }
+    if (paged) release(st); else rot.v *= 0.6;
+  });
+  pg.addEventListener('pointerleave', () => { hover = -1; if (drag && paged) release(drag); drag = null; pressTo.fill(0); tag?.classList.remove('on'); });
+  rot.x = 40; target = 0; // 开场：从一侧转进来落到第一张
+  return stop;
+}
+function swapText(el, text) { if (el.textContent === text) return; el.classList.add('out'); setTimeout(() => { el.textContent = text; el.classList.remove('out'); }, 220); }
+
+/* 1 环：一圈作品大部分在屏外，只有一段弧扫过画面；滚轮 / 拖拽带惯性，停下吸附到最近一格 */
+V.ring = {
+  render: (S) => `<div class="pg paper v1">${brand('入口')}
+    <div class="ring">${S.list.map((s, i) => `<div class="card" data-i="${i}">${artImg(s)}</div>`).join('')}</div>
+    <div class="metaL"><span class="num swap" id="mNo"></span><span class="nm swap" id="mNm"></span></div>
+    <div class="metaR"><span class="swap kdot" id="mK"></span><span class="num swap" id="mT"></span></div>
+    <div class="index" id="idx"><div class="rail">${S.list.map(s => `<span>${esc(s.name)}</span>`).join('')}</div></div>
+    <div class="glass t"></div><div class="glass b"></div>
+    <div class="hint">滚轮 / 拖拽转动 · 点正中那张打开</div>
+    <div class="tagpill">${GL.arrow}打开</div></div>`,
+  mount(root, S) {
+    return ringRun(root, S, { R: 1180, cx: 720 - 1180 + 40, cy: 440, deg: 22, drag: 0.06 }, i => {
+      const s = S.list[i], k = kindOf(s.url);
+      swapText(root.querySelector('#mNo'), no(i)); swapText(root.querySelector('#mNm'), s.name);
+      const mk = root.querySelector('#mK'); mk.className = 'swap kdot ' + k.cls; swapText(mk, k.label);
+      swapText(root.querySelector('#mT'), s.displayUrl || '');
+      const spans = root.querySelectorAll('#idx span'); spans.forEach((e, j) => e.classList.toggle('on', j === i));
+      root.querySelector('#idx .rail').style.transform = `translateY(${Math.min(0, 110 - 26 - spans[i].offsetTop - spans[i].offsetHeight / 2)}px)`;
+    });
+  },
+};
+
+/* 2 索引：名字本身就是界面，大号字一行一个；悬停时那张图跟着指针浮出来 */
+V.index = {
+  render: (S) => `<div class="pg paper v2">${brand()}
+    <div class="hero"><h1>Rainy 的小家 —— 自己做的应用、资源与工具，从这里进。</h1><span class="cnt num">${String(S.list.length).padStart(2, '0')} 个入口</span></div>
+    <ol>${S.list.map((s, i) => { const k = kindOf(s.url); return `<li data-i="${i}"><span class="num">${no(i)}</span><span class="nm">${esc(s.name)}</span><span class="kind kdot ${k.cls}">${k.label}</span><span class="tg">${esc(s.displayUrl || '')}</span></li>`; }).join('')}</ol>
+    <div class="float" id="fl"></div></div>`,
+  mount(root, S) {
+    const pg = root.querySelector('.pg'), fl = root.querySelector('#fl');
+    const p = { x: { x: 700, v: 0 }, y: { x: 400, v: 0 } }; let to = { x: 700, y: 400 }, shown = -1;
+    const stop = loop(dt => {
+      spring(p.x, to.x, 120, 0.8, dt); spring(p.y, to.y, 120, 0.8, dt);
+      const tilt = Math.max(-8, Math.min(8, p.x.v / 160));
+      fl.style.transform = `translate(${p.x.x - 170}px, ${p.y.x - 113 + pg.scrollTop}px) rotate(${tilt}deg)`;
+    });
+    pg.addEventListener('pointermove', e => {
+      const q = local(pg, e); to = { x: q.x + 60, y: q.y };
+      const li = e.target.closest('li'); const i = li ? Number(li.dataset.i) : -1;
+      if (i !== shown) { shown = i; if (i >= 0) fl.innerHTML = artImg(S.list[i]); fl.classList.toggle('on', i >= 0); }
+    });
+    pg.addEventListener('pointerleave', () => { shown = -1; fl.classList.remove('on'); });
+    pg.addEventListener('click', e => { const li = e.target.closest('li'); if (li) open(S.list[Number(li.dataset.i)]); });
+    return stop;
+  },
+};
+
+/* 3 单幅：一次只看一个入口，整幅图占右侧六成；底边一条缩略带切换 */
+V.stage = {
+  render: (S) => `<div class="pg night v3">${brand()}
+    <div class="art-wrap" id="aw"></div>
+    <div class="side"><div class="count num" id="ct"></div><h2 id="nm"></h2><div class="desc" id="ds"></div><div class="chips" id="ch"></div>
+      <div class="acts"><button class="btn p" data-act="go">打开 ${GL.arrow}</button><button class="btn g" data-act="copy">复制链接</button></div></div>
+    <div class="strip">${S.list.map((s, i) => `<div class="th" data-i="${i}">${artImg(s)}</div>`).join('')}</div></div>`,
+  mount(root, S) {
+    const pg = root.querySelector('.pg'), aw = root.querySelector('#aw'); let cur = -1, timer;
+    function show(i) {
+      if (i === cur) return; cur = i; const s = S.list[i], k = kindOf(s.url);
+      const old = aw.querySelectorAll('.layer'); old.forEach(l => { l.classList.add('leave'); setTimeout(() => l.remove(), 900); });
+      const ly = document.createElement('div'); ly.className = 'layer leave'; ly.innerHTML = artImg(s); aw.appendChild(ly);
+      requestAnimationFrame(() => requestAnimationFrame(() => ly.classList.remove('leave')));
+      root.querySelector('#ct').innerHTML = `<b>${no(i)}</b> / ${no(S.list.length - 1)}`;
+      root.querySelector('#nm').textContent = s.name;
+      root.querySelector('#ds').textContent = s.description || '';
+      root.querySelector('#ch').innerHTML = `<span class="chip k ${k.cls}">${k.label}</span>${s.displayUrl ? `<span class="chip">${esc(s.displayUrl)}</span>` : ''}${s.status === 'inactive' ? '<span class="chip">停用</span>' : ''}`;
+      root.querySelectorAll('.th').forEach((t, j) => t.classList.toggle('on', j === i));
+    }
+    pg.addEventListener('pointerover', e => { const t = e.target.closest('.th'); if (t) { clearTimeout(timer); timer = setTimeout(() => show(Number(t.dataset.i)), 60); } });
+    pg.addEventListener('click', e => { const a = e.target.closest('[data-act]')?.dataset.act; if (a === 'go') open(S.list[cur]); if (a === 'copy') toast('已复制 ' + S.list[cur].name + ' 的链接'); });
+    const onKey = e => { if (e.key === 'ArrowRight') show((cur + 1) % S.list.length); if (e.key === 'ArrowLeft') show((cur - 1 + S.list.length) % S.list.length); };
+    addEventListener('keydown', onKey);
+    show(0);
+    return () => removeEventListener('keydown', onKey);
+  },
+};
+
+/* 4 凝结：平时每格是一片字符粒子，指上去粒子向内收拢、凝成那张图 */
+const GLYPHS = ' .·:;+=x*#%@';
+function sampleArt(s, cols, rows) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => { const c = document.createElement('canvas'); c.width = cols; c.height = rows; const g = c.getContext('2d'); g.drawImage(img, 0, 0, cols, rows); const d = g.getImageData(0, 0, cols, rows).data; const out = []; for (let i = 0; i < cols * rows; i++) out.push((d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 765); res({ lum: out, img }); };
+    img.src = artURL(s);
+  });
+}
+V.condense = {
+  render: (S) => `<div class="pg night v4">${brand('入口')}
+    <div class="hero"><canvas id="ttl" width="1344" height="150" style="width:1344px;height:150px"></canvas></div>
+    <div class="grid">${S.list.map((s, i) => { const k = kindOf(s.url); return `<div class="tile" data-i="${i}"><canvas width="840" height="560"></canvas><div class="cap"><span class="num">${no(i)}</span><span class="nm">${esc(s.name)}</span><span class="kind kdot ${k.cls}">${k.label}${s.displayUrl ? ' · ' + esc(s.displayUrl) : ''}</span></div></div>`; }).join('')}</div></div>`,
+  mount(root, S) {
+    const pg = root.querySelector('.pg'), tiles = [...root.querySelectorAll('.tile')];
+    const COLS = 70, ROWS = 35, state = tiles.map(() => ({ t: { x: 0, v: 0 }, to: 0, data: null }));
+    tiles.forEach((tl, i) => sampleArt(S.list[i], COLS, ROWS).then(d => { state[i].data = d; }));
+    // 标题：字符拼出 ooooxo，开场从散开收拢
+    const tc = root.querySelector('#ttl'), tg = tc.getContext('2d');
+    const off = document.createElement('canvas'); off.width = 224; off.height = 25; const og = off.getContext('2d');
+    og.fillStyle = '#fff'; og.font = '700 26px -apple-system, system-ui, sans-serif'; og.textBaseline = 'top'; og.fillText('ooooxo', 0, -2);
+    const td = og.getImageData(0, 0, 224, 25).data; const tp = { x: 0, v: 0 }; let t0 = performance.now();
+    pg.addEventListener('pointermove', e => { const tl = e.target.closest('.tile'); tiles.forEach((_, i) => { state[i].to = tl && Number(tl.dataset.i) === i ? 1 : 0; }); });
+    pg.addEventListener('pointerleave', () => state.forEach(s => { s.to = 0; }));
+    pg.addEventListener('click', e => { const tl = e.target.closest('.tile'); if (tl) open(S.list[Number(tl.dataset.i)]); });
+    return loop((dt, now) => {
+      spring(tp, 1, 26, 0.9, dt);
+      tg.clearRect(0, 0, 1344, 150); tg.font = '600 9px ui-monospace, monospace'; tg.fillStyle = '#f2f3f5';
+      for (let y = 0; y < 25; y += 1) for (let x = 0; x < 224; x += 1) {
+        const a = td[(y * 224 + x) * 4 + 3]; if (a < 100) continue;
+        const h = hash(x + ':' + y), sp = (1 - Math.min(1, tp.x)) * 260;
+        const px = x * 6 + ((h & 255) / 255 - 0.5) * sp, py = y * 6 + (((h >> 8) & 255) / 255 - 0.5) * sp * 0.5;
+        tg.fillText(GLYPHS[4 + (h % 7)], px, py);
+      }
+      tiles.forEach((tl, i) => {
+        const st = state[i]; if (!st.data) return; spring(st.t, st.to, 60, 0.9, dt);
+        const t = Math.max(0, Math.min(1, st.t.x)), c = tl.firstChild, g = c.getContext('2d'); const cw = 840 / COLS, ch = 560 / ROWS;
+        g.clearRect(0, 0, 840, 560); g.font = '600 12px ui-monospace, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        const breathe = Math.sin(now / 900 + i) * 0.5 + 0.5;
+        for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+          const L = st.data.lum[y * COLS + x], gi = Math.floor(L * (GLYPHS.length - 1)); if (gi < 1) continue;
+          const h = hash(i + ':' + x + ':' + y), dx = x - COLS / 2, dy = y - ROWS / 2;
+          const spread = (1 - t) * (0.18 + breathe * 0.04);
+          const px = (x + 0.5) * cw + dx * cw * spread * ((h & 7) / 7), py = (y + 0.5) * ch + dy * ch * spread * (((h >> 3) & 7) / 7);
+          g.fillStyle = `rgba(242,243,245,${(0.25 + L * 0.6) * (1 - t * 0.85)})`; g.fillText(GLYPHS[gi], px, py);
+        }
+        if (t > 0.01) { g.globalAlpha = t; g.drawImage(st.data.img, 0, 0, 840, 560); g.globalAlpha = 1; }
+      });
+    });
+  },
+};
+
+/* 5 目录册：瑞士网格的作品目录，第一项领衔占两格，图里的金属缓慢流动 */
+V.catalog = {
+  render: (S) => `<div class="pg paper v5">${brand()}
+    <div class="mast"><h1>ooooxo</h1><p>Rainy 的小家。自己做的应用、资源与工具都在这里，共 <span class="num">${String(S.list.length).padStart(2, '0')}</span> 个入口；点任意一项进入。</p></div>
+    <div class="cat">${S.list.map((s, i) => { const k = kindOf(s.url); return `<div class="it${i === 0 && S.list.length > 2 ? ' lead' : ''}" data-i="${i}"><div class="ph"><div class="drift">${artImg(s)}</div></div><div class="cap"><span class="num">No.${no(i)}</span><span class="nm">${esc(s.name)}</span><span class="r kdot ${k.cls}">${k.label}${s.displayUrl ? ' · ' + esc(s.displayUrl) : ''}</span>${s.description ? `<span class="d">${esc(s.description)}</span>` : ''}</div></div>`; }).join('')}</div></div>`,
+  mount(root, S) {
+    const pg = root.querySelector('.pg');
+    pg.addEventListener('click', e => { const it = e.target.closest('.it'); if (it) open(S.list[Number(it.dataset.i)]); });
+    return () => {};
+  },
+};
+
+/* 6 横带：一条横向作品带，拖 / 滚轮带惯性，速度越快图越被拉长（粘滞） */
+V.ribbon = {
+  render: (S) => `<div class="pg paper v6">${brand('入口')}
+    <div class="track" id="tr">${S.list.map((s, i) => { const k = kindOf(s.url); return `<div class="slot" data-i="${i}"><div class="ph">${artImg(s)}</div><div class="cap"><span class="num">${no(i)}</span><span class="nm">${esc(s.name)}</span><span class="kind kdot ${k.cls}">${k.label}${s.displayUrl ? ' · ' + esc(s.displayUrl) : ''}</span></div></div>`; }).join('')}</div>
+    <div class="big num" id="bg">01<small> / ${no(S.list.length - 1)}</small></div><div class="prog"><i id="pr"></i></div></div>`,
+  mount(root, S) {
+    const pg = root.querySelector('.pg'), tr = root.querySelector('#tr'), phs = [...root.querySelectorAll('.slot .ph')];
+    const x = { x: 0, v: 0 }; let target = null, drag = null;
+    const slotW = () => root.querySelector('.slot').offsetWidth + 28, max = () => Math.max(0, (S.list.length - 1) * slotW());
+    const stop = loop(dt => {
+      if (!drag) {
+        x.v *= Math.pow(0.05, dt);
+        if (Math.abs(x.v) < 40 && target === null) target = Math.round(x.x / slotW()) * slotW();
+        if (target !== null) spring(x, Math.max(0, Math.min(max(), target)), 80, 0.9, dt); else x.x += x.v * dt;
+        if (x.x < -120) x.x = -120; if (x.x > max() + 120) x.x = max() + 120;
+      }
+      tr.style.transform = `translate(${-x.x}px, -56%)`;
+      const sk = Math.max(-12, Math.min(12, x.v / 120)), st = 1 + Math.min(0.18, Math.abs(x.v) / 4000);
+      phs.forEach(p => { p.style.transform = `skewX(${-sk}deg) scaleX(${st})`; });
+      const i = Math.max(0, Math.min(S.list.length - 1, Math.round(x.x / slotW())));
+      root.querySelector('#bg').firstChild.textContent = no(i);
+      root.querySelector('#pr').style.width = (S.list.length > 1 ? (i / (S.list.length - 1)) * 90 + 10 : 100) + '%';
+    });
+    pg.addEventListener('wheel', e => { e.preventDefault(); target = null; x.v += (e.deltaY + e.deltaX) * 2.2; }, { passive: false });
+    pg.addEventListener('pointerdown', e => { drag = { px: local(pg, e).x, x0: x.x, moved: 0 }; target = null; });
+    pg.addEventListener('pointermove', e => { if (!drag) return; const d = local(pg, e).x - drag.px; drag.moved = Math.max(drag.moved, Math.abs(d)); const nx = drag.x0 - d; x.v = (nx - x.x) * 60; x.x = nx; });
+    pg.addEventListener('pointerup', e => { const m = drag?.moved ?? 99; drag = null; const sl = e.target.closest('.slot'); if (m < 4 && sl) open(S.list[Number(sl.dataset.i)]); });
+    return stop;
+  },
+};
+
+/* 0 现状：现行 index.html 原样跑在 iframe 里，fetch 改成喂样本 */
+V.current = {
+  render: () => `<iframe id="cur" title="现状"></iframe>`,
+  mount(root, S) {
+    const stub = `<script>window.fetch=async u=>({ok:true,status:200,json:async()=>String(u).includes('config')?{title:'Rainy的小家'}:${JSON.stringify(S.list)}});<\/script>`;
+    root.querySelector('#cur').srcdoc = CURRENT_HTML.replace('<head>', '<head>' + stub);
+    return () => {};
+  },
+};
+
+
+/* ================= 第二轮：PC 单幅（shader 实时液体）+ 手机环 ================= */
+
+/* 封面与内容的关联 ①：按内容选液体形态（关键词猜，猜不到按类型）。上线后管理页可手选覆盖 */
+const MOTIFS = [
+  { id: 0, word: '流动', why: '默认：没有可读的内容线索' },
+  { id: 1, word: '对冲', why: '数据交换：两股液流上下对冲、在中线卷起漩涡' },
+  { id: 2, word: '层流', why: '日志 / 记录：被拉成一行行平行流动的层' },
+  { id: 3, word: '波纹', why: '叩叩：一圈圈从中心荡开，像敲门' },
+  { id: 4, word: '台阶', why: '资源库：一层层堆起来的平台' },
+];
+function motifOf(s) {
+  const t = `${s.name} ${s.description || ''} ${s.url}`;
+  if (/交换|同步|exchange|sync/i.test(t)) return MOTIFS[1];
+  if (/日志|log|记录|周报|journal/i.test(t)) return MOTIFS[2];
+  if (/叩|敲|knock|消息|聊天|通知/i.test(t)) return MOTIFS[3];
+  if (/资源|文件|下载|镜像|字体|\/r\//i.test(t)) return MOTIFS[4];
+  return MOTIFS[0];
+}
+/* 关联 ②：同一系列共用种子，只换相位 —— Kero 与 Kero企业版 一眼是一家 */
+const baseName = n => n.replace(/(企业|专业|社区|旗舰)版$|\s*(Pro|Lite|Plus|Enterprise)$/i, '').trim();
+const TINT01 = { 'k-app': [0.59, 0.80, 1.0], 'k-res': [0.59, 0.92, 0.78], 'k-site': [0.72, 0.70, 1.0] };
+
+const VERT = 'attribute vec2 a; varying vec2 v; void main(){ v = a * .5 + .5; gl_Position = vec4(a, 0., 1.); }';
+const FRAG = `precision highp float;
+varying vec2 v;
+uniform vec2 uRes; uniform float uTime, uMix;
+uniform vec4 uA, uB; uniform vec3 uTA, uTB; uniform sampler2D uXA, uXB;
+/* 不用 sin 的哈希：坐标大了 sin 会丢精度，噪声变成一阶阶台阶 */
+float h(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float n(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+  return mix(mix(h(i), h(i + vec2(1., 0.)), u.x), mix(h(i + vec2(0., 1.)), h(i + vec2(1., 1.)), u.x), u.y); }
+float fbm(vec2 p) { float s = 0., a = .5; mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  for (int i = 0; i < 5; i++) { s += a * n(p); p = m * p; a *= .5; } return s; }
+vec3 shade(vec2 uv, vec4 P, vec3 tint, sampler2D X) {
+  float seed = P.x, motif = P.y, tAmt = P.z, ph = P.w, asp = uRes.x / uRes.y, t = uTime * .025;   /* 流速放慢：不急躁 */
+  vec2 p = (uv - .5) * vec2(asp, 1.) * 1.7 + seed;
+  if (motif > 1.5 && motif < 2.5) p.x *= .3;                                        /* 层流 */
+  if (motif > .5 && motif < 1.5) p.x += (smoothstep(.3, .7, uv.y) * 2. - 1.) * 1.6 * sin(uTime * .042); /* 对冲：上下两股来回对冲，幅度有界 */
+  /* 字形不进扭曲链（8 位纹理的梯度一进混沌扭曲就会被放大成锯齿），只让字里的液面「静」下来 */
+  float tx = texture2D(X, uv).r, calm = clamp(tx * tAmt * .55, 0., .8);
+  vec2 q = vec2(fbm(p + vec2(0., t)), fbm(p + vec2(5.2, 1.3) - t));
+  vec2 r = vec2(fbm(p + 3. * q + vec2(1.7, 9.2) + .4 * t), fbm(p + 3. * q + vec2(8.3, 2.8) - .3 * t));
+  float val = fbm(p + 3.4 * (1. - calm) * r);
+  if (motif > 2.5 && motif < 3.5) { float d = length((uv - vec2(.55, .5)) * vec2(asp, 1.));
+    val += .2 * sin(d * 30. - uTime * .7) * exp(-d * 2.2); }                          /* 波纹 */
+  if (motif > 3.5) { float k = val * 7., f = fract(k); val = mix(val, (floor(k) + smoothstep(.3, .7, f)) / 7., .75); } /* 台阶：软台阶，边缘不起锯齿 */
+  val += tx * tAmt * .09;                                                           /* 字形只微微高出液面：若隐若现 */
+  float band = .5 + .5 * cos(6.2832 * (val * 1.7 + ph));
+  float L = pow(band, 1.7), sp = pow(band, 12.);
+  vec3 col = mix(vec3(.043, .043, .05), vec3(.913, .894, .855), L);
+  return mix(col, tint, sp * .55 * clamp(r.x * 1.4, 0., 1.));
+}
+void main() {
+  vec3 a = shade(v, uA, uTA, uXA);
+  vec3 b = uMix > .001 ? shade(v, uB, uTB, uXB) : a;
+  gl_FragColor = vec4(mix(a, b, uMix), 1.);   /* uMix 已在 JS 里按 ease-in-out 缓动过 */
+}`;
+
+/* 关联 ③：标题字形做成一张模糊的「高度图」交给 shader —— 画在小画布上再放大，GPU 线性插值天然就是模糊 */
+function textField(s, how, w, h) {
+  // 全分辨率画字再模糊：低分辨率纹理的梯度是逐格常数，经扭曲放大会撕出一道道横纹
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
+  if (how === 'none') return c;
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const str = how === 'initial' ? [...s.name][0] : s.name;
+  const fs = how === 'initial' ? c.height * 0.8 : Math.min(c.height * 0.26, (c.width * 0.62) / Math.max(2, [...str].length) * 1.15);
+  g.font = `700 ${fs}px -apple-system, "PingFang SC", system-ui, sans-serif`;
+  g.filter = `blur(${Math.round(fs * 0.09)}px)`;
+  g.fillText(str, c.width * 0.56, c.height * 0.52);
+  return c;
+}
+
+function liquid(canvas, preserve = false) {
+  const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: preserve });
+  if (!gl) throw new Error('这台浏览器不支持 WebGL');
+  const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+  const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FRAG)); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+  gl.useProgram(pr);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const al = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(al); gl.vertexAttribPointer(al, 2, gl.FLOAT, false, 0, 0);
+  const U = n => gl.getUniformLocation(pr, n);
+  const u = { res: U('uRes'), time: U('uTime'), mix: U('uMix'), A: U('uA'), B: U('uB'), TA: U('uTA'), TB: U('uTB'), XA: U('uXA'), XB: U('uXB') };
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  const texCache = new Map();
+  function tex(key, cv) {
+    if (texCache.has(key)) return texCache.get(key);
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    texCache.set(key, t); return t;
+  }
+  function params(s, mode) {
+    const base = baseName(s.name), hb = hash(base);
+    const variant = base !== s.name ? 0.33 : 0;
+    const how = mode.text;
+    return {
+      P: [(hb % 977) / 31, mode.motif ? motifOf(s).id : 0, how === 'none' ? 0 : how === 'initial' ? 1.5 : 1.1, ((hb >>> 12) % 100) / 100 + variant],
+      T: TINT01[kindOf(s.url).cls],
+      X: tex(`${s.name}|${how}`, textField(s, how, canvas.width, canvas.height)),
+    };
+  }
+  function draw(time, A, B, mixv) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.uniform2f(u.res, canvas.width, canvas.height); gl.uniform1f(u.time, time); gl.uniform1f(u.mix, mixv);
+    gl.uniform4fv(u.A, A.P); gl.uniform4fv(u.B, B.P); gl.uniform3fv(u.TA, A.T); gl.uniform3fv(u.TB, B.T);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, A.X); gl.uniform1i(u.XA, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, B.X); gl.uniform1i(u.XB, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  const dispose = () => gl.getExtension('WEBGL_lose_context')?.loseContext();
+  return { params, draw, dispose };
+}
+
+/* 静态封面（手机环的卡、PC 缩略带）：用同一个 shader 在固定时刻各拍一帧，所以与 PC 大图同源同形 */
+const coverCache = new Map();
+function bakeCovers(list, mode) {
+  const cv = document.createElement('canvas'); cv.width = 480; cv.height = 320;
+  const L = liquid(cv, true), out = [];
+  for (const s of list) {
+    const key = `${s.name}|${mode.motif}|${mode.text}`;
+    if (!coverCache.has(key)) { const p = L.params(s, mode); L.draw(12, p, p, 0); coverCache.set(key, cv.toDataURL('image/jpeg', 0.86)); }
+    out.push(coverCache.get(key));
+  }
+  L.dispose();
+  return out;
+}
+
+function stagePC(S) {
+  return `<div class="pg night v3">${brand()}
+    <div class="art-wrap"><canvas width="670" height="660"></canvas></div>
+    <div class="side"><div class="txt" id="tx"></div>
+      <div class="acts"><button class="btn p" data-act="go">打开 ${GL.arrow}</button><button class="btn g" data-act="copy">复制链接</button></div></div>
+    <div class="strip">${S.list.map((s, i) => `<div class="th" data-i="${i}"><img class="art" alt="" draggable="false"></div>`).join('')}</div></div>`;
+}
+function phoneRing(S) {
+  return `<div class="pg paper rp">${brand()}
+    <div class="ring">${S.list.map((s, i) => `<div class="card" data-i="${i}"><img class="art" alt="" draggable="false"></div>`).join('')}</div>
+    <div class="dots">${S.list.map(() => '<i></i>').join('')}</div>
+    <div class="meta"><div class="row1"><span class="num swap" id="pNo"></span><span class="nm swap" id="pNm"></span></div>
+      <div class="row2"><span class="swap kdot" id="pK"></span><span class="swap" id="pT"></span></div></div>
+    <div class="hint">上下滑动转动 · 点正中那张打开</div></div>`;
+}
+function mountPC(root, S, mode, covers) {
+  const pc = root.querySelector('.dev.pc') || root, cv = pc.querySelector('.art-wrap canvas');
+  const L = liquid(cv);
+  pc.querySelectorAll('.th img').forEach((im, i) => { im.src = covers[i]; });
+  let A = L.params(S.list[0], mode), B = A, mixv = 0, mixStart = 0, cur = -1, timer;
+  const MIX_MS = 1200;   // 液体换幅比文字（0.45s）慢：先换字，液体再从容地流过去
+  function show(i) {
+    if (i === cur) return;
+    const s = S.list[i], k = kindOf(s.url), m = motifOf(s);
+    if (cur >= 0) { if (mixv > 0) A = B; B = L.params(s, mode); mixStart = performance.now(); mixv = 0.0011; } else { A = B = L.params(s, mode); }
+    const first = cur < 0;
+    cur = i;
+    // 文字层叠化：旧层淡出上移，新层同时从下方淡入，两层交叠（与大图的液体叠化同时进行）
+    const tx = pc.querySelector('#tx'), sl = document.createElement('div');
+    sl.className = 'sl' + (first ? '' : ' in');
+    sl.innerHTML = `<div class="count num"><b>${no(i)}</b> / ${no(S.list.length - 1)}</div><h2>${esc(s.name)}</h2><div class="desc">${esc(s.description || '')}</div>`
+      + `<div class="chips"><span class="chip k ${k.cls}">${k.label}</span>${s.displayUrl ? `<span class="chip">${esc(s.displayUrl)}</span>` : ''}</div>`
+      + `<div class="motif">${mode.motif ? `肌理 · <b>${m.word}</b>　${m.why}` : (mode.text !== 'none' ? '肌理 · <b>字形</b>　标题压进液面' : '')}</div>`;
+    tx.querySelectorAll('.sl:not(.out)').forEach(o => { o.classList.add('out'); setTimeout(() => o.remove(), 500); });
+    tx.appendChild(sl);
+    if (!first) requestAnimationFrame(() => requestAnimationFrame(() => sl.classList.remove('in')));
+    pc.querySelectorAll('.th').forEach((t, j) => t.classList.toggle('on', j === i));
+  }
+  pc.addEventListener('pointerover', e => { const t = e.target.closest('.th'); if (t) { clearTimeout(timer); timer = setTimeout(() => show(Number(t.dataset.i)), 60); } });
+  pc.addEventListener('click', e => { const a = e.target.closest('[data-act]')?.dataset.act; if (a === 'go') open(S.list[cur]); if (a === 'copy') toast('已复制 ' + S.list[cur].name + ' 的链接'); });
+  const onKey = e => { if (e.key === 'ArrowRight') show((cur + 1) % S.list.length); if (e.key === 'ArrowLeft') show((cur - 1 + S.list.length) % S.list.length); };
+  addEventListener('keydown', onKey);
+  show(0);
+  const stop = loop((dt, now) => {
+    if (mixv > 0) { mixv = Math.min(1, (now - mixStart) / MIX_MS); if (mixv >= 1) { A = B; mixv = 0; } }
+    L.draw(now / 1000, A, B, mixv > 0 ? EASE_IN_OUT(mixv) : 0);
+  });
+  return () => { stop(); removeEventListener('keydown', onKey); L.dispose(); };
+}
+function mountPhone(root, S, covers) {
+  const ph = root.querySelector('.dev.phone');
+  ph.querySelectorAll('.card img').forEach((im, i) => { im.src = covers[i]; });
+  // 每格固定 20°：卡高 167 在半径 520 上约占 18°，20° 正好贴着排；不随入口数变（数量少时一圈不满，不平分拉开）
+  return ringRun(ph, S, { W: 390, H: 844, R: 520, cx: 195 - 520 + 22, cy: 330, deg: 20, drag: 0.12, paged: true }, i => {
+    const s = S.list[i], k = kindOf(s.url);
+    swapText(ph.querySelector('#pNo'), no(i)); swapText(ph.querySelector('#pNm'), s.name);
+    const pk = ph.querySelector('#pK'); pk.className = 'swap kdot ' + k.cls; swapText(pk, k.label);
+    swapText(ph.querySelector('#pT'), s.displayUrl || '');
+    ph.querySelectorAll('.dots i').forEach((d, j) => d.classList.toggle('on', j === i));
+  });
+}
+function duoTier(mode) {
+  return {
+    size: [1440 + 70 + 390 + 24, 880],
+    render: S => `<div class="duo"><div class="dev pc">${stagePC(S)}</div><div class="dev phone">${phoneRing(S)}</div></div>`,
+    mount(root, S) {
+      const covers = bakeCovers(S.list, mode);
+      const a = mountPC(root, S, mode, covers), b = mountPhone(root, S, covers);
+      return () => { a(); b(); };
+    },
+  };
+}
+
+/* ---- 轮次与档 ---- */
+const ROUNDS = [{
+  name: '第一轮',
+  list: [
+    { v: V.current, name: '现状', thesis: '暗色卡片网格，与 ReleaseHub 同一张纸', parts: [['纸', '暗'], ['结构', '等大卡网格'], ['图', '字首瓦片']], cost: '' },
+    { v: V.ring, name: '环', thesis: '照参考站：一圈作品大部分在屏外，一段弧扫过画面', parts: [['纸', '近白 + 墨'], ['结构', '屏外环 一次一张'], ['图', '大幅肌理'], ['动', '惯性 吸附 拉伸'], ['信息', '左编号名 右类型 右上索引']], cost: '最「作品集」，但找某个入口要转；液态粘连 / 粒子没做（要上 WebGL）；手机得另排' },
+    { v: V.index, name: '索引', thesis: '名字本身就是界面：大号字一行一个，图跟着指针浮出', parts: [['纸', '近白 + 墨'], ['结构', '大字列表'], ['图', '悬停浮出'], ['动', '弹簧跟随']], cost: '不悬停就看不到图；手机上没有悬停，图得改成行内缩略' },
+    { v: V.stage, name: '单幅', thesis: '一次只看一个入口，整幅图压住六成画面', parts: [['纸', '暗'], ['结构', '单幅 + 缩略带'], ['图', '满幅'], ['动', '模糊交叉换幅']], cost: '一屏只讲一个，扫全部要看缩略带；入口多了缩略带横向溢出' },
+    { v: V.condense, name: '凝结', thesis: '平时是一片字符粒子，指上去才凝成图', parts: [['纸', '暗'], ['结构', '三列网格'], ['图', 'ASCII → 图'], ['动', '粒子收拢 呼吸']], cost: 'Canvas 每帧重绘，入口多了耗电；不悬停时图是「藏」的，读起来更像装置' },
+    { v: V.catalog, name: '目录册', thesis: '瑞士网格的作品目录：第一项领衔，其余三等分，图里金属缓慢流动', parts: [['纸', '近白 + 墨'], ['结构', '12 栏 领衔 + 三等分'], ['图', '大幅 慢流动'], ['信息', '图下编号 名 类型']], cost: '最稳也最「平」，惊喜感最少；领衔项需要定谁来当' },
+    { v: V.ribbon, name: '横带', thesis: '一条横向作品带，拖得越快图被拉得越长', parts: [['纸', '近白 + 墨'], ['结构', '横向一条'], ['图', '大幅'], ['动', '惯性 粘滞拉伸'], ['信息', '左下大编号 进度线']], cost: '横向浏览不符合多数人习惯；触控板要横滑或用滚轮代替' },
+  ],
+}, {
+  name: '第二轮：PC 单幅 + 手机环',
+  list: [
+    { v: duoTier({ motif: true, text: 'none' }), name: '意象', thesis: '封面按内容选液体形态：交换是对冲、日志是层流、资源是台阶、叩叩是波纹',
+      parts: [['关联', '内容意象'], ['字', '不入图'], ['PC', 'shader 实时流动'], ['手机', '环 同源封面']], cost: '意象靠关键词猜；Kero 这类没描述的只能拿默认「流动」，要在管理页手选才贴切' },
+    { v: duoTier({ motif: false, text: 'name' }), name: '字入液', thesis: '标题字压进液面，液体绕着字形流，名字在金属里若隐若现',
+      parts: [['关联', '标题字形'], ['形态', '统一流动'], ['PC', 'shader 实时流动'], ['手机', '环 同源封面']], cost: '与左侧大标题把名字说了两遍；名字长时笔画糊成一团' },
+    { v: duoTier({ motif: true, text: 'name' }), name: '意象 + 字', thesis: '形态讲它是做什么的，字形讲它叫什么，两层叠在一张液面里',
+      parts: [['关联', '内容意象 + 标题字形'], ['PC', 'shader 实时流动'], ['手机', '环 同源封面']], cost: '信息最满，也最容易「太满」；字形与波纹 / 台阶叠在一起时会互相抢' },
+    { v: duoTier({ motif: true, text: 'initial' }), name: '首字为核', thesis: '只取首字，放大成液体包裹的核心，意象在它周围流',
+      parts: [['关联', '内容意象 + 首字'], ['PC', 'shader 实时流动'], ['手机', '环 同源封面']], cost: '首字信息量低：Kero 与 Kero企业版都是 K；英文名首字母不如中文首字有形' },
+  ],
+}];
+
+/* ---- 渲染 ---- */
+const KEY = 'lab.portal-ice.';
+let round = Math.min(Number(localStorage.getItem(KEY + 'r') ?? ROUNDS.length - 1), ROUNDS.length - 1), showCur = false, cleanup = null;
+const cur = ROUNDS.map((r, i) => Math.min(Number(localStorage.getItem(KEY + 'v' + i) ?? (i === 0 ? 1 : 0)), r.list.length - 1));
+let size = [1440, 880];
+let si = Number(localStorage.getItem(KEY + 's') ?? 1);
+const screen = document.getElementById('screen'), frame = document.getElementById('frame');
+
+function fit() {
+  const st = document.getElementById('stage'), W = st.clientWidth - 48, H = st.clientHeight - 24;
+  const k = Math.min(W / size[0], H / size[1]);
+  frame.style.width = size[0] * k + 'px'; frame.style.height = size[1] * k + 'px';
+  screen.style.width = size[0] + 'px'; screen.style.height = size[1] + 'px';
+  screen.style.transform = `scale(${k})`;
+}
+function render() {
+  cleanup?.(); cleanup = null;
+  const list = ROUNDS[round].list, tier = showCur ? ROUNDS[0].list[0] : list[cur[round]];
+  size = tier.v.size || [1440, 880]; fit();
+  frame.classList.toggle('bare', !!tier.v.size);
+  screen.innerHTML = tier.v.render(SPECS[si]);
+  cleanup = tier.v.mount(screen, SPECS[si]);
+  document.getElementById('pick').innerHTML = ROUNDS.map((r, i) => `<button data-r="${i}" aria-pressed="${i === round}">${r.name}</button>`).join('') + '<span class="lab-sep"></span>' + list.map((x, i) => `<button data-v="${i}" aria-pressed="${!showCur && i === cur[round]}"><b>${i}</b>${x.name}</button>`).join('');
+  document.getElementById('spick').innerHTML = SPECS.map((s, i) => `<button data-s="${i}" aria-pressed="${i === si}"><b>${s.key}</b>${s.note}</button>`).join('');
+  document.getElementById('note').innerHTML = `<span class="thesis">${showCur ? '（对照中）' : ''}${tier.thesis}</span>${tier.parts.map(([k, t]) => `<span class="part"><i>${k}</i>${t}</span>`).join('')}${tier.cost ? `<span class="cost">代价：${tier.cost}</span>` : ''}`;
+}
+let tt;
+function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 1800); }
+document.addEventListener('click', e => {
+  const rb = e.target.closest('[data-r]'); if (rb) { round = Number(rb.dataset.r); showCur = false; localStorage.setItem(KEY + 'r', rb.dataset.r); return render(); }
+  const pb = e.target.closest('[data-v]'); if (pb) { showCur = false; cur[round] = Number(pb.dataset.v); localStorage.setItem(KEY + 'v' + round, pb.dataset.v); return render(); }
+  const sb = e.target.closest('[data-s]'); if (sb) { si = Number(sb.dataset.s); localStorage.setItem(KEY + 's', String(si)); return render(); }
+  const a = e.target.closest('[data-act]')?.dataset.act;
+  if (a === 'share') toast('已复制本页链接'); if (a === 'admin') toast('进入管理页（/#admin）');
+});
+addEventListener('keydown', e => {
+  if (/^[0-9]$/.test(e.key) && Number(e.key) < ROUNDS[round].list.length) { showCur = false; cur[round] = Number(e.key); localStorage.setItem(KEY + 'v' + round, e.key); return render(); }
+  const k = e.key.toLowerCase();
+  if (k === 'c') { showCur = !showCur; return render(); }
+  if (k === 's') { si = (si + 1) % SPECS.length; localStorage.setItem(KEY + 's', String(si)); return render(); }
+  if (k === 'p') return render();
+  if (k === 'r' && ROUNDS.length > 1) { round = (round + 1) % ROUNDS.length; showCur = false; localStorage.setItem(KEY + 'r', String(round)); return render(); }
+});
+addEventListener('resize', fit);
+fit(); render();
+</script>
+</body>
+</html>
