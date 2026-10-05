@@ -675,6 +675,19 @@
           </div>
 
           <div class="form-field">
+            <label class="form-label">封面意象</label>
+            <select class="form-select" id="fMotif">
+              <option value="">自动 — 按名称和简介判断</option>
+              <option value="flow">流动 — 默认的液态金属</option>
+              <option value="exchange">对冲 — 两股液流上下对冲（交换 / 同步）</option>
+              <option value="strata">层流 — 一行行平行流动（日志 / 记录）</option>
+              <option value="ripple">波纹 — 从中心荡开（消息 / 通知）</option>
+              <option value="steps">台阶 — 一层层堆叠（资源 / 文件）</option>
+            </select>
+            <p class="form-hint">首页封面按这个形态生成；没写简介的入口建议手选</p>
+          </div>
+
+          <div class="form-field">
             <label class="form-label">状态</label>
             <select class="form-select" id="fStatus">
               <option value="active">● 运行中 — 正常显示</option>
@@ -891,6 +904,7 @@
       document.getElementById('fIcon').value = '';
       document.getElementById('fTags').value = '';
       document.getElementById('fStatus').value = 'active';
+      document.getElementById('fMotif').value = '';
       setColor('#c8ff00');
       document.getElementById('formHeading').textContent = '添加服务';
       document.getElementById('submitBtn').textContent = '添加服务';
@@ -909,6 +923,7 @@
       document.getElementById('fIcon').value = s.icon || '';
       document.getElementById('fTags').value = (s.tags || []).join(', ');
       document.getElementById('fStatus').value = s.status || 'active';
+      document.getElementById('fMotif').value = s.motif || '';
       setColor(s.color || '#c8ff00');
       document.getElementById('formHeading').textContent = '编辑服务';
       document.getElementById('submitBtn').textContent = '保存修改';
@@ -939,6 +954,7 @@
         color:       colorPicker.value,
         tags:        document.getElementById('fTags').value.split(/[,，]/).map(t => t.trim()).filter(Boolean),
         status:      document.getElementById('fStatus').value,
+        motif:       document.getElementById('fMotif').value,
       };
 
       let data;

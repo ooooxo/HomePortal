@@ -34,6 +34,9 @@ r.get('/admin.html', (req, res) => {
 
 r.use(express.static(publicDir));
 
+// 封面意象（首页 shader 的形态）；空 = 按名称 / 简介自动判断
+const MOTIF_IDS = new Set(['flow', 'exchange', 'strata', 'ripple', 'steps']);
+
 // ── Data helpers ──────────────────────────────────────────────────────────────
 
 function ensureData() {
@@ -92,7 +95,7 @@ r.get('/api/services', (_req, res) => {
 
 // Add service
 r.post('/api/services', auth, (req, res) => {
-  const { name, url, description, displayUrl, icon, color, tags, status } = req.body || {};
+  const { name, url, description, displayUrl, icon, color, tags, status, motif } = req.body || {};
   if (!name || !url) return res.status(400).json({ error: 'name 和 url 为必填项' });
 
   const services = load();
@@ -106,6 +109,7 @@ r.post('/api/services', auth, (req, res) => {
     color:       color || '#c8ff00',
     tags:        Array.isArray(tags) ? tags.map(t => t.trim()).filter(Boolean) : [],
     status:      status || 'active',
+    motif:       MOTIF_IDS.has(motif) ? motif : '',
     order:       services.length,
     createdAt:   new Date().toISOString(),
   };
@@ -122,6 +126,7 @@ r.put('/api/services/:id', auth, (req, res) => {
   if (idx === -1) return res.status(404).json({ error: '服务不存在' });
 
   const merged = { ...services[idx], ...req.body, id: services[idx].id };
+  if (merged.motif !== undefined) merged.motif = MOTIF_IDS.has(merged.motif) ? merged.motif : '';
   if (merged.displayUrl !== undefined) merged.displayUrl = String(merged.displayUrl || '').trim();
   if (merged.icon !== undefined) merged.icon = String(merged.icon || '').trim();
   services[idx] = merged;

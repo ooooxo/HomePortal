@@ -1,412 +1,486 @@
 <!DOCTYPE html>
 <!--
-  ooooxo.com 入口页：列出 /api/services 里的服务入口，点卡片打开，卡角一键复制链接；/#admin 全屏嵌入管理页。
-  与同站 ReleaseHub 管理端同一套语言：暗色中性表面 + 天蓝强调、系统字体栈、Hrige 动效梯子（见 ReleaseHub ADR-0001/0002/0006）。
-  纯静态，零依赖；由 server.js 以 express.static 提供。
+  ooooxo.com 入口页。PC（宽屏 + 精确指针）= 单幅：右侧 WebGL 实时液体大图，左侧文字叠化，底部缩略带；
+  手机 = 环：一圈同源封面，1:1 跟手、松手按速度投射吸附到最近一格（WWDC18 Fluid Interfaces），点正中那张放大后打开。
+  每个入口的封面由同一个 shader 按内容生成：形态看内容（交换=对冲、日志=层流、资源=台阶、叩叩=波纹，管理页可手选），
+  标题字形让液面在字里安静下来，同系列（Kero / Kero企业版）共用种子。设计稿与取舍：docs/lab/portal-ice.html。
+  纯静态零依赖，由 server.js 的 express.static 提供；/#admin 全屏嵌入管理页。
 -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
   <title>ooooxo</title>
   <style>
     :root {
-      /* 表面按高度：地面 < 卡 < 浮起；中性不染色 */
-      --bg: #0c0c0e;
-      --surface: #161618;
-      --surface2: #1e1e21;
-      --inset: #25252a;
-      --border: rgba(242, 243, 245, 0.08);
-      --border-strong: rgba(242, 243, 245, 0.15);
-      /* 墨阶 */
-      --text: #f2f3f5;
-      --text2: #9ba1ac;
-      --text3: #5d646f;
-      /* 强调：天蓝主 + 状态色 */
-      --accent: #38bdf8;
-      --accent-tint: rgba(56, 189, 248, 0.12);
-      --green: #34d399;
-      --amber: #fbbf24;
-      --radius: 14px;
-      --radius-sm: 10px;
-      --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei',
-        'Noto Sans SC', system-ui, 'Segoe UI', sans-serif;
+      --paper: #f7f7f5; --paper-ink: #0b0b0c; --paper-ink-2: #55555c; --paper-ink-3: #a3a3aa;
+      --night: #0c0c0e; --night-ink: #f2f3f5; --night-ink-2: #9ba1ac; --night-ink-3: #5d646f; --night-line: rgba(242, 243, 245, .09);
+      --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
-      /* 动效梯子（取自 Hrige tokens.css） */
-      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-      --ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
-      --spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
-      --t-press: 120ms;
-      --t-fast: 160ms;
-      --t-med: 220ms;
-      --t-slow: 320ms;
-      --stagger: 40ms;
-      --shift: 8px;
-      --pop: 0.96;
-      --press: 0.98;
+      /* 缓动按用途挑，从不线性：A→B 换内容用 in-out，出现消失用 out，悬停换色用 hover；手机手感用弹簧（脚本里） */
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+      --ease-hover: cubic-bezier(0.4, 0, 0.2, 1); --spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
     }
-    @media (prefers-reduced-motion: reduce) {
-      :root { --spring-soft: var(--ease-out); --t-press: 1ms; --stagger: 0ms; --shift: 0px; --pop: 1; --press: 1; }
-    }
-
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      line-height: 1.55;
-      font-variant-numeric: tabular-nums;
-      -webkit-font-smoothing: antialiased;
-    }
-    /* 极淡的网格底：与 ReleaseHub 管理端同一张纸 */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image: linear-gradient(rgba(236, 233, 227, 0.013) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(236, 233, 227, 0.013) 1px, transparent 1px);
-      background-size: 34px 34px;
-      pointer-events: none;
-    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { font-family: var(--font); -webkit-font-smoothing: antialiased; overflow: hidden; background: var(--night); }
     a { color: inherit; text-decoration: none; }
     button { font: inherit; color: inherit; }
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .k-app { --kc: #38bdf8; } .k-res { --kc: #34d399; } .k-site { --kc: #818cf8; }
+    .mo .k-app { --kc: #0ea5e9; } .mo .k-res { --kc: #10b981; } .mo .k-site { --kc: #6366f1; }
+    .kdot::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 99px; background: var(--kc); margin-right: 8px; vertical-align: 2px; }
 
-    .wrap { position: relative; max-width: 1040px; margin: 0 auto; padding: 28px 24px 64px; }
+    .brandrow { position: absolute; left: 0; right: 0; top: 0; z-index: 20; display: flex; align-items: center; gap: 6px; padding: 28px 40px; }
+    .brandrow .wm { margin-right: auto; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
+    .gl { width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; color: var(--ink-3);
+      transition: color .16s var(--ease-hover), transform .32s var(--spring-soft); }
+    .gl:hover { color: var(--ink); }
+    .gl:active { transform: scale(.86); transition-duration: .08s; }
+    .gl svg { width: 17px; height: 17px; }
+    .gl.done { color: #34d399; }
+    /* PC 的图标压在液体上：亮处会被吞，垫一层柔影让它在任何底上都看得见 */
+    .pc .gl { color: var(--ink-2); filter: drop-shadow(0 0 6px rgba(0, 0, 0, .65)); }
 
-    /* ── 顶栏：品牌在左，两枚纯字形按钮在右（hover 只动墨阶，不铺底） ── */
-    .top { display: flex; align-items: center; gap: 12px; }
-    .brand { display: flex; align-items: center; gap: 11px; margin-right: auto; border-radius: var(--radius-sm); }
-    .brand-mark {
-      width: 34px; height: 34px; border-radius: 10px;
-      display: grid; place-items: center;
-      background: var(--accent-tint); color: var(--accent);
-    }
-    .brand-mark svg { width: 18px; height: 18px; }
-    .brand-name { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.01em; }
-    .glyph {
-      width: 36px; height: 36px; border: 0; background: none; border-radius: var(--radius-sm);
-      display: grid; place-items: center; color: var(--text3); cursor: pointer;
-      transition: color var(--t-fast) var(--ease-hover), transform var(--t-press) var(--ease-out);
-    }
-    .glyph:hover { color: var(--text); }
-    .glyph:active { transform: scale(0.92); }
-    .glyph svg { width: 18px; height: 18px; }
-    .glyph.is-done { color: var(--green); }
+    /* ================= PC：单幅 ================= */
+    .pc { position: fixed; inset: 0; background: var(--night); color: var(--night-ink); --ink: var(--night-ink); --ink-2: var(--night-ink-2); --ink-3: var(--night-ink-3); }
+    .pc .art { position: absolute; right: 0; top: 0; bottom: 0; width: 62%; overflow: hidden; }
+    .pc .art canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    /* 遮罩从一段实底起、往左多盖 2px：画布左缘落在小数像素上会抗锯齿出一道亮线 */
+    .pc .art::after { content: ''; position: absolute; inset: 0 0 0 -2px; pointer-events: none;
+      background: linear-gradient(90deg, var(--night) 0%, var(--night) 3%, rgba(12, 12, 14, 0) 32%); }
+    .pc .side { position: absolute; left: 6%; top: 0; bottom: 0; width: 38%; z-index: 5; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+    .pc .txt { display: grid; }
+    .pc .sl { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 18px;
+      transition: opacity .45s var(--ease-in-out), transform .45s var(--ease-in-out), filter .45s var(--ease-in-out); }
+    .pc .sl.in { opacity: 0; transform: translateY(12px); filter: blur(6px); }
+    .pc .sl.out { opacity: 0; transform: translateY(-10px); filter: blur(6px); pointer-events: none; }
+    .pc .count { font-size: 14px; color: var(--ink-3); }
+    .pc .count b { color: var(--ink); font-weight: 500; }
+    .pc h1 { margin: 0; font-size: clamp(48px, 5.8vw, 92px); line-height: 1.02; font-weight: 650; letter-spacing: -0.045em; }
+    .pc .desc { font-size: 16px; line-height: 1.6; color: var(--ink-2); max-width: 420px; min-height: 26px; }
+    .pc .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pc .chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: rgba(255, 255, 255, .07); color: var(--ink-2); }
+    .pc .chip.k { color: var(--kc); background: color-mix(in srgb, var(--kc) 14%, transparent); }
+    .pc .chip.off { color: #fbbf24; background: rgba(251, 191, 36, .12); }
+    .pc .motif { font-size: 12px; color: var(--ink-3); }
+    .pc .motif b { font-weight: 500; color: var(--ink-2); }
+    .pc .acts { display: flex; gap: 10px; }
+    .pc .btn { height: 44px; padding: 0 20px; border-radius: 22px; border: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: background .16s var(--ease-hover), color .16s var(--ease-hover), transform .12s var(--ease-out), opacity .16s var(--ease-hover); }
+    .pc .btn:active { transform: scale(.97); }
+    .pc .btn.p { background: var(--ink); color: var(--night); }
+    .pc .btn.p[aria-disabled="true"] { opacity: .35; pointer-events: none; }
+    .pc .btn.g { background: rgba(255, 255, 255, .06); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--night-line); }
+    .pc .btn.g:hover { color: var(--ink); }
+    .pc .btn svg { width: 14px; height: 14px; }
+    .pc .strip { position: absolute; left: 6%; right: 6%; bottom: 32px; z-index: 6; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 4px; }
+    .pc .strip::-webkit-scrollbar { display: none; }
+    .pc .th { flex: none; width: 76px; height: 50px; border-radius: 6px; overflow: hidden; opacity: .4; cursor: pointer; border: 0; padding: 0; background: #1a1a1d;
+      outline: 1px solid transparent; outline-offset: 3px; transition: opacity .16s var(--ease-hover), outline-color .16s var(--ease-hover); }
+    .pc .th:hover { opacity: .8; }
+    .pc .th.on { opacity: 1; outline-color: rgba(255, 255, 255, .6); }
+    .pc .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-    /* ── 标题：站名领头，计数作为一枚数据原子 ── */
-    .head { margin: 56px 0 22px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-    .head-titles { margin-right: auto; }
-    h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; }
-    .count { margin-top: 8px; font-size: 0.82rem; color: var(--text2); }
-    .count b { color: var(--text); font-weight: 650; }
+    /* ================= 手机：环 ================= */
+    .mo { position: fixed; inset: 0; background: var(--paper); color: var(--paper-ink); --ink: var(--paper-ink); --ink-2: var(--paper-ink-2); --ink-3: var(--paper-ink-3); touch-action: none; user-select: none; -webkit-user-select: none; }
+    .mo .brandrow { padding: calc(env(safe-area-inset-top) + 18px) 12px 34px 22px; z-index: 150; background: linear-gradient(var(--paper) 55%, rgba(247, 247, 245, 0)); }
+    .mo .card { position: absolute; left: 0; top: 0; width: var(--cw); height: var(--ch); margin: calc(var(--ch) / -2) 0 0 calc(var(--cw) / -2); border-radius: 8px; overflow: hidden; will-change: transform; background: #1a1a1d; }
+    .mo .card img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+    /* 底部信息区是一片纸：卡从它底下转过去，名字永远不被盖住 */
+    .mo .meta { position: absolute; left: 0; right: 0; bottom: 0; z-index: 150; display: flex; flex-direction: column; gap: 8px;
+      padding: 70px 22px calc(env(safe-area-inset-bottom) + 44px); background: linear-gradient(rgba(247, 247, 245, 0), var(--paper) 42%); }
+    .mo .row1 { display: flex; align-items: baseline; gap: 14px; }
+    .mo .row1 .num { font-size: 13px; color: var(--ink-3); }
+    .mo .nm { font-size: 34px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; }
+    .mo .row2 { display: flex; gap: 14px; font-size: 13px; color: var(--ink-2); padding-left: 1px; }
+    .mo .row2 .off { color: #b45309; }
+    .mo .swap { display: inline-block; transition: filter .45s var(--ease-in-out), opacity .45s var(--ease-in-out); }
+    .mo .swap.out { filter: blur(8px); opacity: 0; }
+    .mo .hint { position: absolute; left: 22px; bottom: calc(env(safe-area-inset-bottom) + 16px); font-size: 11px; color: var(--ink-3); z-index: 151; }
+    .mo .dots { position: absolute; right: 14px; top: 40%; transform: translateY(-50%); z-index: 151; display: flex; flex-direction: column; gap: 6px; }
+    .mo .dots i { width: 4px; height: 4px; border-radius: 9px; background: var(--ink); opacity: .18; transition: opacity .3s var(--ease-in-out), height .3s var(--ease-in-out); }
+    .mo .dots i.on { opacity: .9; height: 14px; }
 
-    .search { position: relative; width: min(320px, 100%); }
-    .search svg { position: absolute; left: 13px; top: 50%; width: 15px; height: 15px; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
-    .search input {
-      width: 100%; padding: 10px 40px 10px 37px;
-      background: var(--surface); color: var(--text);
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      font: inherit; font-size: 0.88rem;
-      transition: border-color var(--t-fast) var(--ease-hover), box-shadow var(--t-fast) var(--ease-hover);
-    }
-    .search input::placeholder { color: var(--text3); }
-    .search input:focus { outline: none; border-color: rgba(56, 189, 248, 0.45); box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12); }
-    .search kbd {
-      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-      font-family: var(--mono); font-size: 0.7rem; color: var(--text3);
-      border: 1px solid var(--border-strong); border-radius: 5px; padding: 0 6px; line-height: 18px;
-    }
-    .search input:focus + kbd, .search input:not(:placeholder-shown) + kbd { opacity: 0; }
-
-    /* ── 入口卡网格 ── */
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 13px; }
-    .card {
-      position: relative; display: flex; flex-direction: column; min-height: 150px; padding: 16px;
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-      transition: border-color var(--t-fast) var(--ease-hover), box-shadow var(--t-fast) var(--ease-hover),
-        transform var(--t-press) var(--ease-out);
-    }
-    /* 只在首次载入时依次浮上；搜索筛选是原地换内容，不重放 */
-    .grid.intro .card {
-      animation: card-in var(--t-slow) var(--ease-out) both;
-      animation-delay: calc(var(--i, 0) * var(--stagger));
-    }
-    .card:hover { border-color: var(--border-strong); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
-    .card:active { transform: scale(var(--press)); }
-    .card:has(.hit:focus-visible) { outline: 2px solid rgba(56, 189, 248, 0.6); outline-offset: 2px; }
-    .card.is-off { opacity: 0.55; }
-    /* 整卡可点：链接铺满卡面，卡角按钮叠在上面 */
-    .hit { position: absolute; inset: 0; border-radius: inherit; z-index: 1; }
-    .hit:focus-visible { outline: none; }
-    .c-head { display: flex; align-items: flex-start; gap: 12px; }
-    .mono-tile {
-      flex: none; width: 40px; height: 40px; border-radius: 11px;
-      display: grid; place-items: center;
-      font-size: 1.05rem; font-weight: 750;
-      color: var(--hue); background: color-mix(in srgb, var(--hue) 14%, transparent);
-    }
-    .mono-tile svg, .mono-tile img { width: 20px; height: 20px; }
-    .c-titles { flex: 1; min-width: 0; }
-    .c-name { display: block; font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .c-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-    .chip { font-size: 0.66rem; font-weight: 650; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; line-height: 1.5; background: var(--inset); color: var(--text2); }
-    /* 类型胶囊：一类一色，与 ReleaseHub 的类型胶囊同义（应用天蓝 / 资源库绿 / 站点靛） */
-    .chip.k-app { color: #38bdf8; background: rgba(56, 189, 248, 0.12); }
-    .chip.k-res { color: #34d399; background: rgba(52, 211, 153, 0.12); }
-    .chip.k-site { color: #818cf8; background: rgba(129, 140, 248, 0.13); }
-    .chip.off { color: var(--amber); background: rgba(251, 191, 36, 0.12); }
-    .c-copy { position: relative; z-index: 2; margin: -8px -8px 0 0; }
-    .c-desc {
-      margin: 12px 0 0; font-size: 0.82rem; color: var(--text2);
-      display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    .c-foot { margin-top: auto; padding-top: 14px; display: flex; align-items: center; gap: 8px; }
-    .c-host { flex: 1; min-width: 0; font-family: var(--mono); font-size: 0.7rem; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .c-go { flex: none; width: 16px; height: 16px; color: var(--text3); transition: color var(--t-fast) var(--ease-hover), transform var(--t-med) var(--ease-out); }
-    .card:hover .c-go { color: var(--accent); transform: translateX(3px); }
-
-    /* 载入中：骨架卡占住版面，数据到了原地换上 */
-    .card.skel { animation: skel 1.1s ease-in-out infinite alternate; }
-    .skel .bar { height: 10px; border-radius: 6px; background: var(--inset); }
-
-    .state { grid-column: 1 / -1; padding: 48px 20px; text-align: center; color: var(--text2); font-size: 0.9rem; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
-    .state b { display: block; color: var(--text); font-size: 1rem; margin-bottom: 4px; }
-    .state button, .state a { margin-top: 14px; display: inline-block; padding: 7px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: none; color: var(--text2); font-size: 0.82rem; cursor: pointer; }
-    .state button:hover, .state a:hover { color: var(--text); }
-
-    .foot { margin-top: 48px; font-size: 0.74rem; color: var(--text3); text-align: center; }
-
-    #toast {
-      position: fixed; left: 50%; bottom: 24px; z-index: 50;
-      padding: 10px 16px; border-radius: var(--radius-sm);
-      background: var(--surface2); border: 1px solid var(--border-strong); color: var(--text); font-size: 0.85rem;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-      opacity: 0; transform: translate(-50%, var(--shift)); pointer-events: none;
-      transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
-    }
+    /* ================= 共用：状态、提示、管理页 ================= */
+    .state { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; font-size: 15px; line-height: 1.7; z-index: 30; background: var(--night); color: var(--night-ink); }
+    .state b { display: block; font-size: 17px; margin-bottom: 4px; }
+    .state button, .state a { margin-top: 14px; display: inline-block; padding: 8px 16px; border-radius: 20px; border: 1px solid currentColor; background: none; cursor: pointer; opacity: .7; }
+    #toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 24px); z-index: 200; padding: 10px 16px; border-radius: 10px; background: #1e1e21; color: #f2f3f5; font-size: 14px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .4); opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity .22s var(--ease-out), transform .22s var(--ease-out); }
     #toast.show { opacity: 1; transform: translate(-50%, 0); }
-
-    /* 结果时刻：复制成功原地描勾 */
-    .check path { stroke-dasharray: 24; animation: draw var(--t-slow) var(--ease-out) both; }
-    .is-done svg { animation: pop var(--t-slow) var(--spring-soft); }
-
-    @keyframes card-in { from { opacity: 0; transform: translateY(var(--shift)); } }
-    @keyframes skel { to { opacity: 0.5; } }
-    @keyframes draw { from { stroke-dashoffset: 24; } to { stroke-dashoffset: 0; } }
-    @keyframes pop { from { transform: scale(var(--pop)); } }
-
-    #adminRoute { position: fixed; inset: 0; z-index: 100; background: var(--bg); }
+    #adminRoute { position: fixed; inset: 0; z-index: 300; background: var(--night); }
     #adminRoute iframe { width: 100%; height: 100%; border: 0; }
-
-    @media (max-width: 560px) {
-      .wrap { padding: 20px 16px 48px; }
-      .head { margin-top: 36px; }
-      .search { width: 100%; }
-      .search kbd { display: none; }
-    }
   </style>
 </head>
 <body>
-  <div class="wrap" id="main">
-    <header class="top">
-      <a href="/" class="brand" aria-label="首页">
-        <span class="brand-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 15l8-5 8 5" opacity="0.45" /><path d="M4 10l8-5 8 5" /><circle cx="12" cy="18.5" r="1.8" fill="currentColor" stroke="none" />
-          </svg>
-        </span>
-        <span class="brand-name">ooooxo</span>
-      </a>
-      <button type="button" class="glyph" id="btnShare" aria-label="复制本页链接" title="复制本页链接">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" /><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" /></svg>
-      </button>
-      <a href="#admin" class="glyph" aria-label="管理" title="管理">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z" /></svg>
-      </a>
-    </header>
-
-    <section class="head">
-      <div class="head-titles">
-        <h1 id="siteTitle">入口</h1>
-        <p class="count" id="count">&nbsp;</p>
-      </div>
-      <label class="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-        <input id="q" type="search" placeholder="搜索名称、简介、标签" autocomplete="off" aria-label="搜索入口" />
-        <kbd>/</kbd>
-      </label>
-    </section>
-
-    <main class="grid" id="grid" aria-live="polite"></main>
-    <p class="foot">ooooxo.com</p>
-  </div>
-
+  <div id="root"></div>
   <div id="toast" role="status"></div>
   <div id="adminRoute" hidden><iframe id="adminFrame" title="管理后台"></iframe></div>
 
   <script>
-    /* ── 子路径前缀：Nginx 把本服务挂在 /home 之类的子路径时，API 跟着加前缀；根路径部署为空 ── */
-    const PREFIX = (() => {
-      const m = location.pathname.match(/^(\/[^/]+)/);
-      return m && !/\.[a-z0-9]+$/i.test(m[1]) ? m[1] : '';
-    })();
+    /* ---- 可调参数 ---------------------------------------------------------- */
+    const COVER_MODE = { motif: true, text: 'name' };   // 封面怎么和入口挂钩（设计稿第二轮）：意象 {true,'none'} · 字入液 {false,'name'} · 意象+字（现用）· 首字为核 {true,'initial'}
+    const MOBILE_QUERY = '(max-width: 760px), (pointer: coarse) and (max-width: 1100px)';
+    const LIQUID_RES = 0.6;          // PC 液体画布分辨率（相对 CSS 像素）：液体本身就柔，0.6 足够且省电
+    const MIX_MS = 1200;             // 液体换幅时长；文字叠化 0.45s（CSS），先换字、液体再流过去
+    const DECEL = 0.995;             // 手机惯性：每毫秒保留的速度比例（苹果默认 0.998 滑得远、0.99 利落；取中间 = 带阻尼）
+    const LEGACY_DEFAULT_COLOR = '#c8ff00';   // 管理页早期的默认色，等于「没选过」，走类型色
+
+    /* 子路径前缀：Nginx 把本服务挂在 /home 之类时 API 跟着加前缀；根路径部署为空 */
+    const PREFIX = (() => { const m = location.pathname.match(/^(\/[^/]+)/); return m && !/\.[a-z0-9]+$/i.test(m[1]) ? m[1] : ''; })();
     const api = p => PREFIX + p;
-
-    /* 管理页早期默认把每个入口都设成这个颜色；它等于「没选过」，按名字自动配色 */
-    const LEGACY_DEFAULT_COLOR = '#c8ff00';
-    /* 自动配色只在这几档里挑：与 ReleaseHub 的类型胶囊同一组色相 */
-    const HUES = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f472b6', '#2dd4bf'];
-
-    const $ = id => document.getElementById(id);
-    const grid = $('grid');
+    const $ = s => document.querySelector(s);
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const no = i => String(i + 1).padStart(2, '0');
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const GL = {
+      link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>',
+      gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg>',
+      check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+      arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>',
+    };
 
-    const ICON_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>';
-    const ICON_CHECK = '<svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>';
-    const ICON_GO = '<svg class="c-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>';
-
-    function hueOf(s) {
-      if (s.color && s.color.toLowerCase() !== LEGACY_DEFAULT_COLOR) return s.color;
-      let h = 0;
-      for (const ch of s.name) h = (h * 31 + ch.codePointAt(0)) >>> 0;
-      return HUES[h % HUES.length];
+    /* ---- 入口的语义：类型、意象、系列 ---- */
+    const kindOf = u => /\/app\//.test(u) ? { cls: 'k-app', label: '应用' } : /\/r\//.test(u) ? { cls: 'k-res', label: '资源库' } : { cls: 'k-site', label: '站点' };
+    const MOTIFS = {
+      flow: { id: 0, word: '流动', why: '没有可读的内容线索' },
+      exchange: { id: 1, word: '对冲', why: '两股液流上下对冲、在中线卷起漩涡' },
+      strata: { id: 2, word: '层流', why: '被拉成一行行平行流动的层' },
+      ripple: { id: 3, word: '波纹', why: '一圈圈从中心荡开，像敲门' },
+      steps: { id: 4, word: '台阶', why: '一层层堆起来的平台' },
+    };
+    function motifOf(s) {
+      if (s.motif && MOTIFS[s.motif]) return MOTIFS[s.motif];          // 管理页手选优先
+      const t = `${s.name} ${s.description || ''} ${s.url}`;
+      if (/交换|同步|exchange|sync/i.test(t)) return MOTIFS.exchange;
+      if (/日志|log|记录|周报|journal/i.test(t)) return MOTIFS.strata;
+      if (/叩|敲|knock|消息|聊天|通知/i.test(t)) return MOTIFS.ripple;
+      if (/资源|文件|下载|镜像|字体|\/r\//i.test(t)) return MOTIFS.steps;
+      return MOTIFS.flow;
     }
-    /* 入口指向 ReleaseHub 的哪一类页面，就是什么类型；其余都算站点 */
-    function kindOf(url) {
-      if (/\/releasehub\/app\//.test(url)) return { cls: 'k-app', label: '应用' };
-      if (/\/releasehub\/r\//.test(url)) return { cls: 'k-res', label: '资源库' };
-      return { cls: 'k-site', label: '站点' };
-    }
-    function hostPath(url) {
-      return String(url).replace(/^https?:\/\//, '').replace(/\/$/, '');
-    }
-
-    function cardHTML(s, i) {
-      const off = s.status === 'inactive';
-      const tag = (s.displayUrl || '').trim();
-      const tile = s.icon ? s.icon : esc([...s.name.trim()][0] || '·');
-      const kind = kindOf(s.url);
-      const chips = [
-        `<span class="chip ${kind.cls}">${kind.label}</span>`,
-        tag && `<span class="chip">${esc(tag)}</span>`,
-        ...(s.tags || []).map(t => `<span class="chip">${esc(t)}</span>`),
-        off && '<span class="chip off">停用</span>',
-      ].filter(Boolean).join('');
-      return `
-        <article class="card${off ? ' is-off' : ''}" style="--hue:${esc(hueOf(s))};--i:${i}">
-          <a class="hit" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" aria-label="打开 ${esc(s.name)}"></a>
-          <div class="c-head">
-            <span class="mono-tile" aria-hidden="true">${tile}</span>
-            <div class="c-titles">
-              <span class="c-name">${esc(s.name)}</span>
-              <div class="c-chips">${chips}</div>
-            </div>
-            <button type="button" class="glyph c-copy" data-url="${esc(s.url)}" aria-label="复制 ${esc(s.name)} 的链接" title="复制链接">${ICON_COPY}</button>
-          </div>
-          ${s.description ? `<p class="c-desc">${esc(s.description)}</p>` : ''}
-          <div class="c-foot"><span class="c-host">${esc(hostPath(s.url))}</span>${ICON_GO}</div>
-        </article>`;
+    const baseName = n => n.replace(/(企业|专业|社区|旗舰)版$|\s*(Pro|Lite|Plus|Enterprise)$/i, '').trim();
+    function hash(str) { let h = 2166136261; for (const ch of str) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+    const KIND_TINT = { 'k-app': [0.59, 0.80, 1.0], 'k-res': [0.59, 0.92, 0.78], 'k-site': [0.72, 0.70, 1.0] };
+    function tintOf(s) {
+      const c = String(s.color || '').toLowerCase();
+      if (/^#[0-9a-f]{6}$/.test(c) && c !== LEGACY_DEFAULT_COLOR) return [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16) / 255);
+      return KIND_TINT[kindOf(s.url).cls];
     }
 
-    let all = [];
-    function render() {
-      const q = $('q').value.trim().toLowerCase();
-      const list = q
-        ? all.filter(s => [s.name, s.description, s.displayUrl, s.url, ...(s.tags || [])].some(v => String(v || '').toLowerCase().includes(q)))
-        : all;
-      $('count').innerHTML = q ? `<b>${list.length}</b> / ${all.length} 个入口` : `<b>${all.length}</b> 个入口`;
-      if (!all.length) {
-        grid.innerHTML = '<div class="state"><b>还没有入口</b>在管理页添加第一个服务。<br><a href="#admin">去添加</a></div>';
-      } else if (!list.length) {
-        grid.innerHTML = `<div class="state"><b>没有匹配「${esc(q)}」的入口</b>换个关键词，或清空搜索。</div>`;
-      } else {
-        grid.innerHTML = list.map(cardHTML).join('');
+    /* ---- 缓动与弹簧 ---- */
+    function bezier(x1, y1, x2, y2) {
+      const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+      return p => { if (p <= 0) return 0; if (p >= 1) return 1; let t = p;
+        for (let i = 0; i < 8; i++) { const e = ((ax * t + bx) * t + cx) * t - p, d = (3 * ax * t + 2 * bx) * t + cx; if (Math.abs(e) < 1e-5 || Math.abs(d) < 1e-6) break; t -= e / d; }
+        return ((ay * t + by) * t + cy) * t; };
+    }
+    const EASE_IN_OUT = bezier(0.77, 0, 0.175, 1);
+    const spring = (p, to, k, z, dt) => { p.v += (-k * (p.x - to) - 2 * z * Math.sqrt(k) * p.v) * dt; p.x += p.v * dt; };
+    function loop(tick) {
+      let on = true, last = performance.now();
+      const f = t => { if (!on) return; const dt = Math.min(1 / 30, (t - last) / 1000); last = t; tick(dt, t); requestAnimationFrame(f); };
+      requestAnimationFrame(f);
+      return () => { on = false; };
+    }
+
+    /* ---- 液体 shader：域扭曲噪声 → 铬面色带；意象改形、字形让液面安静 ---- */
+    const VERT = 'attribute vec2 a; varying vec2 v; void main(){ v = a * .5 + .5; gl_Position = vec4(a, 0., 1.); }';
+    const FRAG = `precision highp float;
+varying vec2 v;
+uniform vec2 uRes; uniform float uTime, uMix;
+uniform vec4 uA, uB; uniform vec3 uTA, uTB; uniform sampler2D uXA, uXB;
+float h(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float n(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+  return mix(mix(h(i), h(i + vec2(1., 0.)), u.x), mix(h(i + vec2(0., 1.)), h(i + vec2(1., 1.)), u.x), u.y); }
+float fbm(vec2 p) { float s = 0., a = .5; mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  for (int i = 0; i < 5; i++) { s += a * n(p); p = m * p; a *= .5; } return s; }
+vec3 shade(vec2 uv, vec4 P, vec3 tint, sampler2D X) {
+  float seed = P.x, motif = P.y, tAmt = P.z, ph = P.w, asp = uRes.x / uRes.y, t = uTime * .025;
+  vec2 p = (uv - .5) * vec2(asp, 1.) * 1.7 + seed;
+  if (motif > 1.5 && motif < 2.5) p.x *= .3;
+  if (motif > .5 && motif < 1.5) p.x += (smoothstep(.3, .7, uv.y) * 2. - 1.) * 1.6 * sin(uTime * .042);
+  float tx = texture2D(X, uv).r, calm = clamp(tx * tAmt * .55, 0., .8);
+  vec2 q = vec2(fbm(p + vec2(0., t)), fbm(p + vec2(5.2, 1.3) - t));
+  vec2 r = vec2(fbm(p + 3. * q + vec2(1.7, 9.2) + .4 * t), fbm(p + 3. * q + vec2(8.3, 2.8) - .3 * t));
+  float val = fbm(p + 3.4 * (1. - calm) * r);
+  if (motif > 2.5 && motif < 3.5) { float d = length((uv - vec2(.55, .5)) * vec2(asp, 1.)); val += .2 * sin(d * 30. - uTime * .7) * exp(-d * 2.2); }
+  if (motif > 3.5) { float k = val * 7., f = fract(k); val = mix(val, (floor(k) + smoothstep(.3, .7, f)) / 7., .75); }
+  val += tx * tAmt * .09;
+  float band = .5 + .5 * cos(6.2832 * (val * 1.7 + ph));
+  float L = pow(band, 1.7), sp = pow(band, 12.);
+  vec3 col = mix(vec3(.043, .043, .05), vec3(.913, .894, .855), L);
+  return mix(col, tint, sp * .55 * clamp(r.x * 1.4, 0., 1.));
+}
+void main() {
+  vec3 a = shade(v, uA, uTA, uXA);
+  vec3 b = uMix > .001 ? shade(v, uB, uTB, uXB) : a;
+  gl_FragColor = vec4(mix(a, b, uMix), 1.);
+}`;
+    /* 标题字形 → 全分辨率模糊高度图（低分辨率纹理的梯度会被扭曲放大成横纹） */
+    function textField(s, how, w, h) {
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+      if (how === 'none') return c;
+      const str = how === 'initial' ? [...s.name][0] : s.name;
+      const fs = how === 'initial' ? h * 0.8 : Math.min(h * 0.26, (w * 0.62) / Math.max(2, [...str].length) * 1.15);
+      g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.font = `700 ${fs}px -apple-system, "PingFang SC", system-ui, sans-serif`;
+      g.filter = `blur(${Math.round(fs * 0.09)}px)`;
+      g.fillText(str, w * 0.56, h * 0.52);
+      return c;
+    }
+    function liquid(canvas, preserve = false) {
+      const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: preserve });
+      if (!gl) return null;
+      const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VERT)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FRAG)); gl.linkProgram(pr);
+      if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+      gl.useProgram(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const al = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(al); gl.vertexAttribPointer(al, 2, gl.FLOAT, false, 0, 0);
+      const U = k => gl.getUniformLocation(pr, k);
+      const u = { res: U('uRes'), time: U('uTime'), mix: U('uMix'), A: U('uA'), B: U('uB'), TA: U('uTA'), TB: U('uTB'), XA: U('uXA'), XB: U('uXB') };
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      const texCache = new Map();
+      function tex(key, cv) {
+        if (texCache.has(key)) return texCache.get(key);
+        const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+        for (const [k, val] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, val);
+        texCache.set(key, t); return t;
       }
+      function params(s) {
+        const base = baseName(s.name), hb = hash(base), how = COVER_MODE.text;
+        return {
+          P: [(hb % 977) / 31, COVER_MODE.motif ? motifOf(s).id : 0, how === 'none' ? 0 : how === 'initial' ? 1.5 : 1.1, ((hb >>> 12) % 100) / 100 + (base !== s.name ? 0.33 : 0)],
+          T: tintOf(s),
+          X: tex(`${s.name}|${how}|${canvas.width}x${canvas.height}`, textField(s, how, canvas.width, canvas.height)),
+        };
+      }
+      function draw(time, A, B, mixv) {
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.uniform2f(u.res, canvas.width, canvas.height); gl.uniform1f(u.time, time); gl.uniform1f(u.mix, mixv);
+        gl.uniform4fv(u.A, A.P); gl.uniform4fv(u.B, B.P); gl.uniform3fv(u.TA, A.T); gl.uniform3fv(u.TB, B.T);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, A.X); gl.uniform1i(u.XA, 0);
+        gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, B.X); gl.uniform1i(u.XB, 1);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+      return { params, draw, dispose: () => gl.getExtension('WEBGL_lose_context')?.loseContext() };
+    }
+    /* 静态封面（手机环、PC 缩略带）：同一个 shader 在固定时刻各拍一帧，与 PC 大图同源同形 */
+    const coverCache = new Map();
+    function covers(list) {
+      const cv = document.createElement('canvas'); cv.width = 480; cv.height = 320;
+      const L = liquid(cv, true);
+      if (!L) return list.map(() => '');
+      const out = list.map(s => {
+        const key = JSON.stringify([s.name, s.description, s.url, s.motif, s.color]);
+        if (!coverCache.has(key)) { const p = L.params(s); L.draw(12, p, p, 0); coverCache.set(key, cv.toDataURL('image/jpeg', 0.86)); }
+        return coverCache.get(key);
+      });
+      L.dispose();
+      return out;
     }
 
-    function showSkeleton() {
-      grid.innerHTML = Array.from({ length: 6 }, (_, i) => `
-        <div class="card skel" style="--i:${i}" aria-hidden="true">
-          <div class="c-head"><span class="mono-tile" style="--hue:var(--text3)"></span>
-            <div class="c-titles"><div class="bar" style="width:55%"></div><div class="bar" style="width:30%;margin-top:10px"></div></div></div>
-          <div class="c-foot"><div class="bar" style="width:70%"></div></div>
-        </div>`).join('');
+    /* ---- 复制与提示 ---- */
+    let toastTimer;
+    function toast(msg) { $('#toast').textContent = msg; $('#toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.remove('show'), 2000); }
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+      const ta = Object.assign(document.createElement('textarea'), { value: text }); ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select(); const ok = document.execCommand('copy'); ta.remove();
+      if (!ok) throw new Error('copy failed');
+    }
+    function copyWithTick(btn, text, label) {
+      copyText(text).then(() => {
+        const idle = btn.innerHTML; btn.innerHTML = label ? GL.check + label : GL.check; btn.classList.add('done');
+        setTimeout(() => { btn.innerHTML = idle; btn.classList.remove('done'); }, 1400);
+      }, () => toast('复制失败，请手动复制'));
+    }
+    const brand = () => `<div class="brandrow"><span class="wm">ooooxo</span><button class="gl" data-act="share" aria-label="复制本页链接">${GL.link}</button><a class="gl" href="#admin" aria-label="管理">${GL.gear}</a></div>`;
+
+    /* ================= PC：单幅 ================= */
+    function mountPC(list) {
+      $('#root').innerHTML = `<div class="pc">${brand()}<div class="art"><canvas></canvas></div>
+        <div class="side"><div class="txt" id="tx"></div><div class="acts"><a class="btn p" id="go" target="_blank" rel="noopener noreferrer">打开 ${GL.arrow}</a><button class="btn g" id="cp">复制链接</button></div></div>
+        <nav class="strip" aria-label="全部入口">${list.map((s, i) => `<button class="th" data-i="${i}" aria-label="${esc(s.name)}"><img alt=""></button>`).join('')}</nav></div>`;
+      const root = $('.pc'), cv = root.querySelector('canvas'), art = root.querySelector('.art');
+      const fit = () => { const k = Math.min(devicePixelRatio || 1, 1.5) * LIQUID_RES; cv.width = Math.round(art.clientWidth * k); cv.height = Math.round(art.clientHeight * k); };
+      fit();
+      const L = liquid(cv);
+      if (!L) console.error('WebGL 不可用：PC 大图不渲染，入口照常可用');
+      covers(list).forEach((src, i) => { if (src) root.querySelectorAll('.th img')[i].src = src; });
+      let A = null, B = null, mixv = 0, mixStart = 0, cur = -1, hoverT;
+      function show(i) {
+        if (i === cur) return;
+        const s = list[i], k = kindOf(s.url), m = motifOf(s), first = cur < 0, off = s.status === 'inactive';
+        if (L) { const p = L.params(s); if (first) A = B = p; else { if (mixv > 0) A = B; B = p; mixStart = performance.now(); mixv = 0.0011; } }
+        cur = i;
+        // 文字层叠化：旧层淡出上移、新层同时从下方淡入
+        const tx = root.querySelector('#tx'), sl = document.createElement('div');
+        sl.className = 'sl' + (first ? '' : ' in');
+        sl.innerHTML = `<div class="count num"><b>${no(i)}</b> / ${no(list.length - 1)}</div><h1>${esc(s.name)}</h1><div class="desc">${esc(s.description || '')}</div>`
+          + `<div class="chips"><span class="chip k ${k.cls}">${k.label}</span>${s.displayUrl ? `<span class="chip">${esc(s.displayUrl)}</span>` : ''}${off ? '<span class="chip off">停用</span>' : ''}</div>`
+          + (COVER_MODE.motif ? `<div class="motif">肌理 · <b>${m.word}</b>　${m.why}</div>` : '');
+        tx.querySelectorAll('.sl:not(.out)').forEach(o => { o.classList.add('out'); setTimeout(() => o.remove(), 500); });
+        tx.appendChild(sl);
+        if (!first) requestAnimationFrame(() => requestAnimationFrame(() => sl.classList.remove('in')));
+        const go = root.querySelector('#go'); go.href = s.url; go.setAttribute('aria-disabled', String(off));
+        root.querySelectorAll('.th').forEach((t, j) => { t.classList.toggle('on', j === i); if (j === i) t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+      }
+      root.addEventListener('pointerover', e => { const t = e.target.closest('.th'); if (t) { clearTimeout(hoverT); hoverT = setTimeout(() => show(Number(t.dataset.i)), 60); } });
+      root.addEventListener('click', e => {
+        const t = e.target.closest('.th'); if (t) return show(Number(t.dataset.i));
+        if (e.target.closest('#cp')) copyWithTick(e.target.closest('#cp'), list[cur].url, '已复制');
+        const sh = e.target.closest('[data-act="share"]'); if (sh) copyWithTick(sh, location.origin + location.pathname);
+      });
+      const onKey = e => {
+        if (!$('#adminRoute').hidden) return;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') show((cur + 1) % list.length);
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') show((cur - 1 + list.length) % list.length);
+      };
+      addEventListener('keydown', onKey);
+      const ro = new ResizeObserver(fit); ro.observe(art);
+      show(0);
+      const stop = L ? loop((dt, now) => {
+        if (!$('#adminRoute').hidden) return;
+        if (mixv > 0) { mixv = Math.min(1, (now - mixStart) / MIX_MS); if (mixv >= 1) { A = B; mixv = 0; } }
+        L.draw(reduced ? 20 : now / 1000, A, B, mixv > 0 ? EASE_IN_OUT(mixv) : 0);
+      }) : () => {};
+      return () => { stop(); ro.disconnect(); removeEventListener('keydown', onKey); L?.dispose(); };
     }
 
+    /* ================= 手机：环 =================
+       滚动手感照 WWDC18「Designing Fluid Interfaces」：拖时 1:1 跟手、零阻尼；松手按减速率投射落点，
+       吸到离投射点最近的一格，弹簧从松手速度接力落定；两端橡皮筋。点按手感走弹簧。 */
+    function mountMobile(list) {
+      const W = innerWidth, H = innerHeight, cw = Math.min(W * 0.64, 300), ch = cw / 1.5;
+      const R = cw * 2.08, cx = W / 2 - R + W * 0.056, cy = H * 0.39, sens = 0.12 * (250 / cw);   // 与设计稿同一手感（250 宽的卡每 px 转 0.12°），卡大则按比例变慢
+      $('#root').innerHTML = `<div class="mo" style="--cw:${cw}px;--ch:${ch}px">${brand()}
+        <div class="ring">${list.map((s, i) => `<div class="card" data-i="${i}"><img alt=""></div>`).join('')}</div>
+        <div class="dots">${list.map(() => '<i></i>').join('')}</div>
+        <div class="meta"><div class="row1"><span class="num swap" id="pNo"></span><span class="nm swap" id="pNm"></span></div>
+          <div class="row2"><span class="swap kdot" id="pK"></span><span class="swap" id="pT"></span></div></div>
+        <div class="hint">上下滑动 · 点正中那张打开</div></div>`;
+      const pg = $('.mo'), cards = [...pg.querySelectorAll('.card')], n = cards.length;
+      covers(list).forEach((src, i) => { if (src) cards[i].querySelector('img').src = src; });
+      const deg = 20, step = n * deg >= 360 ? 360 / n : deg, loopRing = n * deg >= 360, minA = -(n - 1) * step;   // 每格 20°：卡贴着排
+      const snapAt = a => Math.round(a / step) * step, clampT = t => (loopRing ? t : Math.max(minA, Math.min(0, t)));
+      const project = v => (v / 1000) * DECEL / (1 - DECEL);
+      const SNAP_K = (2 * Math.PI / 0.38) ** 2, SNAP_Z = 0.8;
+      const rubber = (over, dim) => (over * dim * 0.55) / (dim + 0.55 * Math.abs(over));
+      const band = x => (loopRing ? x : x > 0 ? rubber(x, step * 2) : x < minA ? minA + rubber(x - minA, step * 2) : x);
+      const track = (st, raw) => { const t = performance.now(); st.samples.push({ t, x: raw }); while (st.samples.length > 2 && t - st.samples[0].t > 100) st.samples.shift(); };
+      const releaseV = st => { const a = st.samples[0], b = st.samples[st.samples.length - 1]; if (!a || !b || b.t === a.t || performance.now() - b.t > 80) return 0; return (b.x - a.x) / ((b.t - a.t) / 1000); };
+      const rot = { x: reduced ? 0 : 40, v: 0 }; let target = 0, drag = null, wheel = null, cur = -1;
+      const release = st => { const v = releaseV(st); target = clampT(snapAt(rot.x + project(v))); rot.v = v; };
+      const press = cards.map(() => ({ x: 0, v: 0 })), pressTo = cards.map(() => 0), opening = { x: 0, v: 0 }; let openTo = 0, openIdx = -1;
+      const swap = (el, text) => { if (el.textContent === text) return; el.classList.add('out'); setTimeout(() => { el.textContent = text; el.classList.remove('out'); }, 220); };
+      function meta(i) {
+        const s = list[i], k = kindOf(s.url);
+        swap(pg.querySelector('#pNo'), no(i)); swap(pg.querySelector('#pNm'), s.name);
+        const pk = pg.querySelector('#pK'); pk.className = 'swap kdot ' + k.cls; swap(pk, k.label);
+        const pt = pg.querySelector('#pT'); pt.classList.toggle('off', s.status === 'inactive'); swap(pt, s.status === 'inactive' ? '停用' : (s.displayUrl || ''));
+        pg.querySelectorAll('.dots i').forEach((d, j) => d.classList.toggle('on', j === i));
+      }
+      const stop = loop(dt => {
+        if (!$('#adminRoute').hidden) return;
+        if (!drag && !wheel) spring(rot, target ?? snapAt(rot.x), SNAP_K, SNAP_Z, dt);
+        spring(opening, openTo, 110, 0.82, dt); if (openTo === 0 && opening.x < 0.005) openIdx = -1;
+        const o = Math.max(0, Math.min(1, opening.x));
+        cards.forEach((c, i) => {
+          let a = i * step + rot.x; if (loopRing) a = ((a + 180) % 360 + 360) % 360 - 180;
+          const rad = a * Math.PI / 180, off = Math.min(1, Math.abs(a) / step);
+          let x = cx + Math.cos(rad) * R, y = cy + Math.sin(rad) * R;
+          spring(press[i], pressTo[i], 520, 0.5, dt);
+          const p = press[i].x, stretch = 1 + Math.min(0.12, Math.abs(rot.v) / 900);
+          let sc = 1 - p * 0.06;
+          if (i === openIdx) { x += (W / 2 - x) * o; y += (H * 0.46 - y) * o; a *= 1 - o; sc *= 1 + o * 2.1; }
+          c.style.transform = `translate(${x}px, ${y}px) rotate(${a}deg) scale(${sc * stretch}, ${sc / stretch})`;
+          c.style.opacity = String((1 - off * 0.25) * (openIdx >= 0 && i !== openIdx ? 1 - o : 1) * (list[i].status === 'inactive' ? 0.55 : 1));
+          c.style.filter = p > 0.01 ? `brightness(${1 - p * 0.16})` : '';
+          c.style.zIndex = i === openIdx && o > 0.01 ? '999' : String(100 - Math.round(Math.abs(a)));
+        });
+        const k = Math.round(-rot.x / step), i = loopRing ? ((k % n) + n) % n : Math.max(0, Math.min(n - 1, k));
+        if (i !== cur) { cur = i; meta(i); }
+      });
+      pg.addEventListener('wheel', e => {
+        e.preventDefault(); if (openTo) return;
+        if (!wheel) { wheel = { raw: rot.x, samples: [] }; target = null; rot.v = 0; }
+        wheel.raw -= (e.deltaY + e.deltaX) * sens; rot.x = band(wheel.raw); track(wheel, wheel.raw);
+        clearTimeout(wheel.idle); wheel.idle = setTimeout(() => { const w = wheel; wheel = null; release(w); }, 120);
+      }, { passive: false });
+      pg.addEventListener('pointerdown', e => {
+        if (openTo || e.target.closest('.brandrow')) return;
+        pg.setPointerCapture(e.pointerId);
+        drag = { y: e.clientY, raw0: rot.x, moved: 0, samples: [], card: e.target.closest('.card') }; rot.v = 0; target = null; track(drag, rot.x);
+        if (drag.card) pressTo[Number(drag.card.dataset.i)] = 1;
+      });
+      pg.addEventListener('pointermove', e => {
+        if (!drag) return;
+        const d = e.clientY - drag.y; drag.moved = Math.max(drag.moved, Math.abs(d));
+        if (drag.moved > 6) pressTo.fill(0);
+        const raw = drag.raw0 + d * sens; rot.x = band(raw); track(drag, raw);
+      });
+      const up = () => {
+        if (!drag) return; const st = drag; drag = null; pressTo.fill(0);
+        if (st.moved < 6 && st.card) {
+          const i = Number(st.card.dataset.i);
+          if (i !== cur) { target = clampT(st.raw0 + snapAt(-i * step - st.raw0)); return; }
+          if (list[i].status === 'inactive') { toast('这个入口已停用'); target = snapAt(rot.x); return; }
+          openIdx = i; openTo = 1;                       // 放大铺满 → 跳过去（手机上同页打开）
+          setTimeout(() => location.assign(list[i].url), reduced ? 0 : 420);
+          return;
+        }
+        release(st);
+      };
+      pg.addEventListener('pointerup', up); pg.addEventListener('pointercancel', up);
+      pg.addEventListener('click', e => { const sh = e.target.closest('[data-act="share"]'); if (sh) copyWithTick(sh, location.origin + location.pathname); });
+      // 从别的页返回（bfcache）时，把放大的那张收回来
+      const onShow = () => { openTo = 0; };
+      addEventListener('pageshow', onShow);
+      return () => { stop(); removeEventListener('pageshow', onShow); };
+    }
+
+    /* ================= 装配 ================= */
+    let services = [], unmount = null;
+    const mq = matchMedia(MOBILE_QUERY);
+    function render() {
+      unmount?.(); unmount = null;
+      if (!services.length) {
+        $('#root').innerHTML = '<div class="state"><div><b>还没有入口</b>在管理页添加第一个服务。<br><a href="#admin">去添加</a></div></div>';
+        return;
+      }
+      unmount = mq.matches ? mountMobile(services) : mountPC(services);
+    }
     async function load() {
-      showSkeleton();
       try {
         const r = await fetch(api('/api/services'));
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        all = await r.json();
-        grid.classList.add('intro');
+        services = await r.json();
         render();
-        setTimeout(() => grid.classList.remove('intro'), 800);
       } catch (e) {
-        grid.innerHTML = `<div class="state"><b>入口列表没取到</b>${esc(e.message)}<br><button type="button" id="retry">重试</button></div>`;
-        $('retry').onclick = load;
+        $('#root').innerHTML = `<div class="state"><div><b>入口列表没取到</b>${esc(e.message)}<br><button type="button" id="retry">重试</button></div></div>`;
+        $('#retry').onclick = load;
       }
     }
+    mq.addEventListener('change', render);
+    // 手机转屏才重排环：地址栏收放也会触发 resize，但宽度不变，不能因此把环重置回第一张
+    let rsT, lastW = innerWidth; addEventListener('resize', () => { if (!mq.matches || innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rsT); rsT = setTimeout(render, 200); });
+    fetch(api('/api/config')).then(r => r.json()).then(c => { if (c.title) document.title = c.title; });
 
-    fetch(api('/api/config'))
-      .then(r => r.json())
-      .then(c => { if (c.title) { $('siteTitle').textContent = c.title; document.title = c.title; } });
-
-    /* ── 复制：成功在按钮上原地打勾；剪贴板不可用（http 直连）时退回 execCommand ── */
-    let toastTimer;
-    function toast(msg) {
-      $('toast').textContent = msg;
-      $('toast').classList.add('show');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2200);
-    }
-    async function copyText(text) {
-      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
-      const ta = Object.assign(document.createElement('textarea'), { value: text });
-      ta.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      ta.remove();
-      if (!ok) throw new Error('copy failed');
-    }
-    async function copyFrom(btn, url) {
-      try {
-        await copyText(url);
-      } catch {
-        toast('复制失败，请手动复制');
-        return;
-      }
-      const idle = btn.innerHTML;
-      btn.innerHTML = ICON_CHECK;
-      btn.classList.add('is-done');
-      setTimeout(() => { btn.innerHTML = idle; btn.classList.remove('is-done'); }, 1400);
-    }
-    $('btnShare').addEventListener('click', e => copyFrom(e.currentTarget, location.origin + location.pathname));
-    grid.addEventListener('click', e => {
-      const btn = e.target.closest('.c-copy');
-      if (btn && !btn.classList.contains('is-done')) copyFrom(btn, btn.dataset.url);
-    });
-
-    /* ── 搜索：输入即筛；「/」聚焦，Esc 清空 ── */
-    $('q').addEventListener('input', render);
-    $('q').addEventListener('keydown', e => { if (e.key === 'Escape') { e.target.value = ''; render(); e.target.blur(); } });
-    document.addEventListener('keydown', e => {
-      if (e.key === '/' && !e.target.closest('input, textarea') && $('adminRoute').hidden) { e.preventDefault(); $('q').focus(); }
-    });
-
-    /* ── /#admin：全屏嵌入管理页，地址栏保持 /#admin ── */
+    /* /#admin：全屏嵌入管理页，地址栏保持 /#admin；关掉回来时重新拉一遍入口（管理页可能改过） */
     function applyHash() {
       const admin = location.hash === '#admin';
-      $('adminRoute').hidden = !admin;
-      $('main').toggleAttribute('inert', admin);
-      document.body.style.overflow = admin ? 'hidden' : '';
-      if (admin && !$('adminFrame').src) $('adminFrame').src = api('/admin.html?embed=1');
-      if (!admin && $('adminFrame').src) load();
+      $('#adminRoute').hidden = !admin;
+      $('#root').toggleAttribute('inert', admin);
+      if (admin && !$('#adminFrame').src) $('#adminFrame').src = api('/admin.html?embed=1');
+      if (!admin && $('#adminFrame').src) load();
     }
-    window.addEventListener('hashchange', applyHash);
+    addEventListener('hashchange', applyHash);
     applyHash();
     load();
   </script>
