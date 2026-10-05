@@ -4,28 +4,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>指引页 — 管理后台</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:       #08090e;
-      --surface:  #0d0f16;
-      --surface2: #13151f;
-      --border:   rgba(255,255,255,0.07);
-      --border2:  rgba(255,255,255,0.12);
-      --text:     #f0f0f5;
-      --text2:    #8b8da0;
-      --text3:    #3e4057;
-      --placeholder: rgba(100, 103, 120, 0.42);
-      --accent:   #c8ff00;
-      --green:    #4ade80;
-      --red:      #f87171;
+      /* 与入口页、ReleaseHub 管理端同一套：中性表面 + 天蓝强调 */
+      --bg:       #0c0c0e;
+      --surface:  #161618;
+      --surface2: #1e1e21;
+      --border:   rgba(242,243,245,0.08);
+      --border2:  rgba(242,243,245,0.15);
+      --text:     #f2f3f5;
+      --text2:    #9ba1ac;
+      --text3:    #5d646f;
+      --placeholder: rgba(155, 161, 172, 0.45);
+      --accent:   #38bdf8;
+      --green:    #34d399;
+      --red:      #e8624f;
       --radius:   12px;
-      --tr:       0.22s ease;
+      --tr:       0.16s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     html, body { height: 100%; }
@@ -33,7 +31,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
@@ -76,12 +74,12 @@
       display: flex; align-items: center; justify-content: center;
     }
     .login-logo span {
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-weight: 700; font-size: 15px;
     }
 
     .login-title {
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-weight: 700; font-size: 22px;
       letter-spacing: -0.5px;
       margin-bottom: 6px;
@@ -96,7 +94,7 @@
       display: block;
       font-size: 12px; color: var(--text2);
       margin-bottom: 6px;
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       letter-spacing: 0.02em;
     }
     .field input {
@@ -123,7 +121,7 @@
       background: var(--accent);
       border: none; border-radius: 9px;
       color: #08090e;
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-weight: 600; font-size: 14px;
       cursor: pointer;
       transition: opacity var(--tr), transform var(--tr);
@@ -173,7 +171,7 @@
       display: flex; align-items: center; justify-content: center;
     }
     .topbar-logo-name {
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-weight: 700; font-size: 15px;
     }
     .topbar-sep {
@@ -253,12 +251,12 @@
     .btn-new:active { transform: scale(0.98); }
 
     .section-title {
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-weight: 600; font-size: 14px;
       letter-spacing: 0.2px;
     }
     .section-count {
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-size: 12px; color: var(--text3);
     }
 
@@ -293,7 +291,7 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .svc-url {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
       font-size: 11px; color: var(--text2);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       margin-top: 2px;
@@ -301,7 +299,7 @@
 
     .svc-status-badge {
       font-size: 11px;
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       padding: 2px 7px; border-radius: 20px;
       flex-shrink: 0;
     }
@@ -367,7 +365,7 @@
     }
 
     .form-title {
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-weight: 600; font-size: 15px;
       margin-bottom: 22px;
       display: flex; align-items: center; gap: 8px;
@@ -383,7 +381,7 @@
       display: block;
       font-size: 12px; color: var(--text2);
       margin-bottom: 6px;
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       letter-spacing: 0.02em;
     }
     .form-required { color: var(--accent); margin-left: 2px; }
@@ -448,7 +446,7 @@
     .form-hint {
       font-size: 11px; color: var(--text3);
       margin-top: 5px;
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
     }
 
     .form-actions {
@@ -460,7 +458,7 @@
       background: var(--accent);
       border: none; border-radius: 8px;
       color: #08090e;
-      font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
       font-weight: 600; font-size: 13px;
       cursor: pointer;
       transition: opacity var(--tr), transform var(--tr);
@@ -531,9 +529,9 @@
           <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true">
             <defs>
               <linearGradient id="admLoginLogoGrad" x1="5" y1="4" x2="27" y2="28" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#eaff8a"/>
-                <stop offset="0.55" stop-color="#7dffc8"/>
-                <stop offset="1" stop-color="#3ad4e8"/>
+                <stop stop-color="#7dd3fc"/>
+                <stop offset="0.55" stop-color="#38bdf8"/>
+                <stop offset="1" stop-color="#818cf8"/>
               </linearGradient>
             </defs>
             <path d="M6 22l10-6 10 6" stroke="url(#admLoginLogoGrad)" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" opacity="0.32"/>
@@ -569,9 +567,9 @@
             <svg width="18" height="18" viewBox="0 0 32 32" fill="none" aria-hidden="true">
               <defs>
                 <linearGradient id="admTopLogoGrad" x1="5" y1="4" x2="27" y2="28" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#eaff8a"/>
-                  <stop offset="0.55" stop-color="#7dffc8"/>
-                  <stop offset="1" stop-color="#3ad4e8"/>
+                  <stop stop-color="#7dd3fc"/>
+                  <stop offset="0.55" stop-color="#38bdf8"/>
+                  <stop offset="1" stop-color="#818cf8"/>
                 </linearGradient>
               </defs>
               <path d="M6 22l10-6 10 6" stroke="url(#admTopLogoGrad)" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" opacity="0.32"/>
