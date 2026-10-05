@@ -1,1006 +1,420 @@
 <!DOCTYPE html>
+<!--
+  管理后台：登录（整幅液体背景，站名压进液面）+ 入口管理（左列表带各自封面，右表单带实时封面预览）。
+  与首页同一套语言与同一个 shader（liquid.js）；控件全部自绘：分段选择、两步确认，不用原生 select / confirm。
+  首页 /#admin 以 iframe 嵌入本页（?embed=1）；直接打开 /admin.html 会被 server.js 重定向到 /#admin。
+-->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>指引页 — 管理后台</title>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <title>管理后台</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      /* 与入口页、ReleaseHub 管理端同一套：中性表面 + 天蓝强调 */
-      --bg:       #0c0c0e;
-      --surface:  #161618;
-      --surface2: #1e1e21;
-      --border:   rgba(242,243,245,0.08);
-      --border2:  rgba(242,243,245,0.15);
-      --text:     #f2f3f5;
-      --text2:    #9ba1ac;
-      --text3:    #5d646f;
-      --placeholder: rgba(155, 161, 172, 0.45);
-      --accent:   #38bdf8;
-      --green:    #34d399;
-      --red:      #e8624f;
-      --radius:   12px;
-      --tr:       0.16s cubic-bezier(0.4, 0, 0.2, 1);
+      --bg: #0c0c0e; --surface: #141416; --surface2: #1c1c1f; --inset: #222226;
+      --line: rgba(242, 243, 245, .08); --line-strong: rgba(242, 243, 245, .15);
+      --ink: #f2f3f5; --ink-2: #9ba1ac; --ink-3: #5d646f;
+      --accent: #38bdf8; --green: #34d399; --amber: #fbbf24; --red: #f0806e;
+      --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+      --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
+      --r: 12px; --r-sm: 9px;
+      /* 缓动按用途：A→B in-out，出现消失 out，悬停换色 hover；按压回弹用 spring-soft */
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+      --ease-hover: cubic-bezier(0.4, 0, 0.2, 1); --spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
     }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+    button, input, textarea { font: inherit; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .k-app { --kc: #38bdf8; } .k-res { --kc: #34d399; } .k-site { --kc: #818cf8; }
 
-    html, body { height: 100%; }
+    /* ---- 按钮 ---- */
+    .btn { height: 40px; padding: 0 18px; border-radius: 20px; border: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+      transition: background .16s var(--ease-hover), color .16s var(--ease-hover), box-shadow .16s var(--ease-hover), transform .3s var(--spring-soft), opacity .16s var(--ease-hover); }
+    .btn:active { transform: scale(.96); transition-duration: .08s; }
+    .btn:disabled { opacity: .4; pointer-events: none; }
+    .btn[hidden] { display: none; }
+    .btn.p { background: var(--ink); color: var(--bg); }
+    .btn.g { background: rgba(255, 255, 255, .05); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+    .btn.g:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .btn.armed { color: var(--red); background: rgba(240, 128, 110, .12); box-shadow: inset 0 0 0 1px rgba(240, 128, 110, .4); }
+    .btn svg { width: 15px; height: 15px; }
+    .gl { width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; border-radius: 8px; cursor: pointer; color: var(--ink-3);
+      transition: color .16s var(--ease-hover), transform .3s var(--spring-soft); }
+    .gl:hover { color: var(--ink); }
+    .gl:active { transform: scale(.86); transition-duration: .08s; }
+    .gl:disabled { opacity: .25; pointer-events: none; }
+    .gl.armed { color: var(--red); width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
+    .gl svg { width: 16px; height: 16px; }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-    }
+    /* ================= 登录 ================= */
+    .gate { position: fixed; inset: 0; z-index: 10; }
+    .gate .art { position: absolute; right: 0; top: 0; bottom: 0; width: 62%; overflow: hidden; transition: opacity 1.6s var(--ease-in-out), transform 2.2s var(--ease-out); }
+    .gate .art canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .gate .art::after { content: ''; position: absolute; inset: 0 0 0 -2px; pointer-events: none; background: linear-gradient(90deg, var(--bg) 0%, var(--bg) 3%, rgba(12, 12, 14, 0) 32%); }
+    .gate .side { position: absolute; left: 7%; top: 0; bottom: 0; width: min(380px, 80vw); z-index: 2; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+    .gate .wm { position: absolute; left: 40px; top: 28px; z-index: 2; font-size: 14px; font-weight: 700; }
+    .gate .eyebrow { font-size: 14px; color: var(--ink-3); }
+    .gate h1 { margin: 0 0 18px; font-size: clamp(40px, 4.6vw, 68px); line-height: 1.04; font-weight: 650; letter-spacing: -0.04em; }
+    .gate form { display: flex; flex-direction: column; gap: 12px; }
+    .gate .err { min-height: 20px; font-size: 13px; color: var(--red); }
+    .gate.shake form { animation: shake .42s var(--ease-out); }
+    @keyframes shake { 20% { transform: translateX(-8px); } 45% { transform: translateX(6px); } 70% { transform: translateX(-3px); } }
+    .gate .side > *, .gate .wm { transition: opacity .8s var(--ease-out) var(--d, 0ms), transform .8s var(--ease-out) var(--d, 0ms), filter .8s var(--ease-out) var(--d, 0ms); }
+    .gate.enter .art { opacity: 0; transform: scale(1.06); }
+    .gate.enter .side > *, .gate.enter .wm { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+    .gate .eyebrow { --d: 300ms; } .gate h1 { --d: 400ms; } .gate form { --d: 550ms; } .gate .wm { --d: 200ms; }
+    .gate.leave { opacity: 0; transition: opacity .45s var(--ease-in-out); pointer-events: none; }
 
-    body::before {
-      content: '';
-      position: fixed; inset: 0; z-index: 0;
-      background-image:
-        linear-gradient(rgba(120,200,255,0.016) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(120,200,255,0.016) 1px, transparent 1px);
-      background-size: 56px 56px;
-      pointer-events: none;
-    }
+    /* ---- 输入框（自绘） ---- */
+    .in { width: 100%; height: 44px; padding: 0 14px; border-radius: var(--r-sm); border: 0; background: rgba(255, 255, 255, .05); color: var(--ink);
+      box-shadow: inset 0 0 0 1px var(--line); outline: none; font-size: 15px; transition: box-shadow .16s var(--ease-hover), background .16s var(--ease-hover); }
+    .in::placeholder { color: var(--ink-3); }
+    .in:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .in:focus { box-shadow: inset 0 0 0 1px rgba(56, 189, 248, .55), 0 0 0 3px rgba(56, 189, 248, .14); background: rgba(255, 255, 255, .07); }
+    textarea.in { height: 84px; padding: 11px 14px; resize: vertical; line-height: 1.55; }
 
-    /* ═══════════════════════════════ LOGIN GATE ═══════════════════════════ */
-    #loginGate {
-      position: fixed; inset: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: center;
-      background: var(--bg);
-    }
+    /* ================= 管理面 ================= */
+    .panel { min-height: 100vh; opacity: 0; transition: opacity .6s var(--ease-in-out); }
+    .panel.on { opacity: 1; }
+    .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 18px 32px; background: linear-gradient(var(--bg) 70%, rgba(12, 12, 14, 0)); }
+    .top .wm { font-size: 14px; font-weight: 700; }
+    .top .sub { font-size: 13px; color: var(--ink-3); margin-right: auto; }
+    .main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 40px; padding: 12px 32px 64px; max-width: 1240px; margin: 0 auto; }
+    .sec-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; }
+    .sec-head h2 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
+    .sec-head .cnt { font-size: 13px; color: var(--ink-3); margin-right: auto; }
 
-    .login-card {
-      width: 360px;
-      background: var(--surface);
-      border: 1px solid var(--border2);
-      border-radius: 20px;
-      padding: 40px 36px;
-      animation: fadeUp 0.4s ease;
-    }
+    .list { display: flex; flex-direction: column; gap: 8px; }
+    .row { display: flex; align-items: center; gap: 14px; padding: 10px 10px 10px 10px; border-radius: var(--r); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); cursor: pointer;
+      transition: box-shadow .16s var(--ease-hover), background .16s var(--ease-hover), opacity .5s var(--ease-out) var(--d, 0ms), transform .5s var(--ease-out) var(--d, 0ms); }
+    .row:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+    .row.on { box-shadow: inset 0 0 0 1px rgba(56, 189, 248, .5); background: var(--surface2); }
+    .row.off .thumb, .row.off .nm { opacity: .5; }
+    .list.enter .row { opacity: 0; transform: translateY(10px); }
+    .thumb { flex: none; width: 78px; height: 52px; border-radius: 7px; overflow: hidden; background: var(--inset); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .row .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .row .nm { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row .meta { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--ink-3); min-width: 0; }
+    .row .meta .url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+    .kind { flex: none; color: var(--kc); }
+    .kind::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 9px; background: var(--kc); margin-right: 6px; vertical-align: 1px; }
+    .pill { flex: none; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: rgba(255, 255, 255, .06); color: var(--ink-2); }
+    .pill.off { color: var(--amber); background: rgba(251, 191, 36, .12); }
+    .row .acts { flex: none; display: flex; align-items: center; gap: 2px; }
+    .empty { padding: 48px 20px; text-align: center; color: var(--ink-3); font-size: 14px; border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--line); }
 
-    .login-logo {
-      display: flex; align-items: center; gap: 10px;
-      margin-bottom: 32px;
-    }
-    .login-logo-mark {
-      width: 36px; height: 36px; border-radius: 11px;
-      background: linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
-      border: 1px solid rgba(255,255,255,0.1);
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.35) inset;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .login-logo span {
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-weight: 700; font-size: 15px;
-    }
+    /* ---- 表单 ---- */
+    .form { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; overscroll-behavior: contain; align-self: start; display: flex; flex-direction: column; gap: 16px; padding: 18px; border-radius: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+    .preview { position: relative; aspect-ratio: 3 / 2; border-radius: 10px; overflow: hidden; background: var(--inset); }
+    .preview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    .preview .cap { position: absolute; left: 12px; bottom: 10px; right: 12px; display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: rgba(242, 243, 245, .8); text-shadow: 0 1px 8px rgba(0, 0, 0, .7); }
+    .preview .cap b { font-weight: 600; color: #fff; }
+    .form h3 { margin: 0; font-size: 16px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+    .form h3 .dot { width: 7px; height: 7px; border-radius: 9px; background: var(--accent); }
+    .field { display: flex; flex-direction: column; gap: 7px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+    .field label .req { color: var(--accent); margin-left: 3px; }
+    .field .hint { font-size: 12px; color: var(--ink-3); }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    /* 分段选择：替代原生 select；选中靠墨阶 + 抬起的底，不用彩色色块 */
+    .seg { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 10px; background: rgba(255, 255, 255, .04); box-shadow: inset 0 0 0 1px var(--line); }
+    .seg button { flex: 1 0 auto; height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: none; color: var(--ink-3); font-size: 13px; cursor: pointer;
+      transition: color .16s var(--ease-hover), background .16s var(--ease-hover), box-shadow .16s var(--ease-hover); }
+    .seg button:hover { color: var(--ink); }
+    .seg button[aria-pressed="true"] { color: var(--ink); background: rgba(255, 255, 255, .09); box-shadow: 0 1px 2px rgba(0, 0, 0, .4); font-weight: 600; }
+    .seg .sw { display: inline-block; width: 10px; height: 10px; border-radius: 9px; margin-right: 6px; vertical-align: -1px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); }
+    .color-in { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .form .acts { display: flex; gap: 10px; }
+    .form .acts .btn.p { flex: 1; }
 
-    .login-title {
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-weight: 700; font-size: 22px;
-      letter-spacing: -0.5px;
-      margin-bottom: 6px;
-    }
-    .login-sub {
-      font-size: 13px; color: var(--text2);
-      margin-bottom: 28px;
-    }
+    #toast { position: fixed; left: 50%; bottom: 28px; z-index: 50; padding: 10px 16px; border-radius: 10px; background: #1e1e21; color: var(--ink); font-size: 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--line);
+      opacity: 0; transform: translate(-50%, 8px); pointer-events: none; transition: opacity .22s var(--ease-out), transform .22s var(--ease-out); }
+    #toast.show { opacity: 1; transform: translate(-50%, 0); }
+    #toast.error { color: var(--red); }
 
-    .field { margin-bottom: 14px; }
-    .field label {
-      display: block;
-      font-size: 12px; color: var(--text2);
-      margin-bottom: 6px;
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      letter-spacing: 0.02em;
-    }
-    .field input {
-      width: 100%;
-      padding: 11px 14px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 9px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color var(--tr), box-shadow var(--tr);
-    }
-    .field input::placeholder { color: var(--placeholder); }
-    .field input:focus {
-      border-color: rgba(200,255,0,0.35);
-      box-shadow: 0 0 0 3px rgba(200,255,0,0.07);
-    }
-
-    .btn-primary {
-      width: 100%;
-      padding: 12px;
-      background: var(--accent);
-      border: none; border-radius: 9px;
-      color: #08090e;
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-weight: 600; font-size: 14px;
-      cursor: pointer;
-      transition: opacity var(--tr), transform var(--tr);
-      margin-top: 4px;
-    }
-    .btn-primary:hover { opacity: 0.88; }
-    .btn-primary:active { transform: scale(0.98); }
-
-    .login-error {
-      background: rgba(248,113,113,0.1);
-      border: 1px solid rgba(248,113,113,0.2);
-      border-radius: 8px;
-      color: var(--red);
-      font-size: 13px;
-      padding: 10px 14px;
-      margin-bottom: 14px;
-      display: none;
-    }
-    .login-error.show { display: block; }
-
-    /* ═══════════════════════════════ ADMIN PANEL ══════════════════════════ */
-    #adminPanel {
-      display: none;
-      position: relative; z-index: 1;
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 0 28px 60px;
-    }
-
-    /* ── Top bar ── */
-    .topbar {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 22px 0 18px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 20px;
-    }
-    .topbar-left { display: flex; align-items: center; gap: 14px; }
-    .topbar-logo {
-      display: flex; align-items: center; gap: 9px;
-      text-decoration: none; color: var(--text);
-    }
-    .topbar-logo-mark {
-      width: 32px; height: 32px; border-radius: 9px;
-      background: linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
-      border: 1px solid rgba(255,255,255,0.1);
-      box-shadow: 0 0 0 1px rgba(0,0,0,0.35) inset;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .topbar-logo-name {
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-weight: 700; font-size: 15px;
-    }
-    .topbar-sep {
-      width: 1px; height: 20px;
-      background: var(--border2);
-    }
-    .topbar-title {
-      font-size: 13px; color: var(--text2);
-    }
-
-    .topbar-right { display: flex; align-items: center; gap: 10px; }
-
-    .btn-ghost {
-      display: flex; align-items: center; gap: 6px;
-      padding: 7px 13px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: transparent;
-      color: var(--text2);
-      font-family: inherit;
-      font-size: 13px;
-      cursor: pointer;
-      text-decoration: none;
-      transition: all var(--tr);
-    }
-    .btn-ghost:hover {
-      border-color: var(--border2);
-      color: var(--text);
-    }
-    .btn-logout:hover {
-      border-color: rgba(248,113,113,0.3) !important;
-      color: var(--red) !important;
-      background: rgba(248,113,113,0.06) !important;
-    }
-
-    /* ── Layout: columns ── */
-    .admin-layout {
-      display: grid;
-      grid-template-columns: 1fr 380px;
-      gap: 28px;
-      align-items: start;
-    }
     @media (max-width: 900px) {
-      .admin-layout { grid-template-columns: 1fr; }
-    }
-
-    /* ── List top bar ── */
-    .list-topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
-    .list-topbar-left {
-      display: flex;
-      align-items: baseline;
-      gap: 12px;
-    }
-    .btn-new {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 18px;
-      background: var(--accent);
-      color: #08090e;
-      border: none;
-      border-radius: 10px;
-      font-family: inherit;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity var(--tr), transform var(--tr);
-    }
-    .btn-new:hover { opacity: 0.9; }
-    .btn-new:active { transform: scale(0.98); }
-
-    .section-title {
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-weight: 600; font-size: 14px;
-      letter-spacing: 0.2px;
-    }
-    .section-count {
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-size: 12px; color: var(--text3);
-    }
-
-    /* ── Service list ── */
-    .svc-list { display: flex; flex-direction: column; gap: 8px; }
-
-    .svc-item {
-      display: flex; align-items: center; gap: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px 16px;
-      cursor: pointer;
-      transition: border-color var(--tr), background var(--tr);
-    }
-    .svc-item:hover { border-color: var(--border2); background: var(--surface2); }
-    .svc-item:focus-visible {
-      outline: 2px solid rgba(200,255,0,0.35);
-      outline-offset: 2px;
-    }
-
-    .svc-color-bar {
-      width: 3px; height: 40px; border-radius: 3px;
-      flex-shrink: 0;
-    }
-
-    .svc-icon { font-size: 22px; flex-shrink: 0; width: 36px; text-align: center; }
-
-    .svc-info { flex: 1; overflow: hidden; }
-    .svc-name {
-      font-weight: 500; font-size: 14px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .svc-url {
-      font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Consolas, monospace;
-      font-size: 11px; color: var(--text2);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      margin-top: 2px;
-    }
-
-    .svc-status-badge {
-      font-size: 11px;
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      padding: 2px 7px; border-radius: 20px;
-      flex-shrink: 0;
-    }
-    .svc-status-badge.active {
-      color: var(--green);
-      background: rgba(74,222,128,0.08);
-      border: 1px solid rgba(74,222,128,0.15);
-    }
-    .svc-status-badge.inactive {
-      color: var(--text3);
-      background: transparent;
-      border: 1px solid var(--border);
-    }
-
-    .svc-actions {
-      display: flex; align-items: center; gap: 6px;
-      flex-shrink: 0;
-    }
-
-    .order-btns { display: flex; flex-direction: column; gap: 2px; }
-
-    .icon-btn {
-      width: 30px; height: 30px;
-      border-radius: 7px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text2);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      transition: all var(--tr);
-      font-size: 13px;
-    }
-    .icon-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
-    .icon-btn.del:hover  { border-color: rgba(248,113,113,0.3); color: var(--red); background: rgba(248,113,113,0.06); }
-
-    .order-btn {
-      width: 22px; height: 22px;
-      border-radius: 5px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--text3);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      font-size: 10px;
-      transition: all var(--tr);
-    }
-    .order-btn:hover { border-color: var(--border2); color: var(--text2); }
-
-    .svc-empty {
-      text-align: center; padding: 60px 20px;
-      color: var(--text3);
-    }
-    .svc-empty-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
-    .svc-empty p { font-size: 13px; }
-
-    /* ── Form panel ── */
-    .form-panel {
-      background: var(--surface);
-      border: 1px solid var(--border2);
-      border-radius: 16px;
-      padding: 28px 24px;
-      position: sticky; top: 28px;
-    }
-
-    .form-title {
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-weight: 600; font-size: 15px;
-      margin-bottom: 22px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .form-title-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 8px var(--accent);
-    }
-
-    .form-field { margin-bottom: 14px; }
-    .form-label {
-      display: block;
-      font-size: 12px; color: var(--text2);
-      margin-bottom: 6px;
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      letter-spacing: 0.02em;
-    }
-    .form-required { color: var(--accent); margin-left: 2px; }
-
-    .form-input,
-    .form-select,
-    .form-textarea {
-      width: 100%;
-      padding: 10px 12px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 13.5px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color var(--tr), box-shadow var(--tr);
-    }
-    .form-input::placeholder,
-    .form-textarea::placeholder { color: var(--placeholder); }
-    .form-input:focus, .form-select:focus, .form-textarea:focus {
-      border-color: rgba(200,255,0,0.3);
-      box-shadow: 0 0 0 3px rgba(200,255,0,0.06);
-    }
-    .form-select {
-      appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b8da0' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-      padding-right: 34px;
-      cursor: pointer;
-    }
-    .form-select option { background: #13151f; }
-    .form-textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
-
-    /* Color + emoji row */
-    .form-row { display: grid; grid-template-columns: 1fr 80px; gap: 10px; }
-    .form-color-wrap { position: relative; }
-    .form-color-preview {
-      width: 100%;
-      padding: 10px 12px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      display: flex; align-items: center; gap: 8px;
-      cursor: pointer;
-      transition: border-color var(--tr);
-      font-size: 13.5px; color: var(--text);
-    }
-    .form-color-preview:hover { border-color: var(--border2); }
-    .color-swatch {
-      width: 18px; height: 18px; border-radius: 4px;
-      flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);
-    }
-    input[type="color"] {
-      position: absolute; width: 0; height: 0; opacity: 0; border: none;
-    }
-    .emoji-input {
-      text-align: center; font-size: 20px; padding: 6px 4px;
-    }
-
-    .form-hint {
-      font-size: 11px; color: var(--text3);
-      margin-top: 5px;
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-    }
-
-    .form-actions {
-      display: flex; gap: 8px; margin-top: 20px;
-    }
-    .btn-submit {
-      flex: 1;
-      padding: 11px;
-      background: var(--accent);
-      border: none; border-radius: 8px;
-      color: #08090e;
-      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
-      font-weight: 600; font-size: 13px;
-      cursor: pointer;
-      transition: opacity var(--tr), transform var(--tr);
-    }
-    .btn-submit:hover { opacity: 0.88; }
-    .btn-submit:active { transform: scale(0.98); }
-
-    .btn-cancel {
-      padding: 11px 16px;
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text2);
-      font-family: inherit;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all var(--tr);
-      display: none;
-    }
-    .btn-cancel:hover { border-color: var(--border2); color: var(--text); }
-    .btn-cancel.show { display: block; }
-
-    /* ── Toast ── */
-    #toast {
-      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-      padding: 12px 20px;
-      border-radius: 10px;
-      font-size: 13px; font-weight: 500;
-      z-index: 200;
-      opacity: 0; pointer-events: none;
-      transition: opacity 0.3s ease, transform 0.3s ease;
-      transform: translateX(-50%) translateY(8px);
-      white-space: nowrap;
-    }
-    #toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-    #toast.success {
-      background: rgba(74,222,128,0.12);
-      border: 1px solid rgba(74,222,128,0.25);
-      color: var(--green);
-    }
-    #toast.error {
-      background: rgba(248,113,113,0.12);
-      border: 1px solid rgba(248,113,113,0.25);
-      color: var(--red);
-    }
-
-    /* ── Animations ── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes itemIn {
-      from { opacity: 0; transform: translateX(-8px); }
-      to   { opacity: 1; transform: translateX(0); }
+      .gate .art { width: 100%; opacity: .55; }
+      .gate .art::after { background: linear-gradient(180deg, rgba(12, 12, 14, .2), var(--bg) 85%); }
+      .gate .side { left: 24px; right: 24px; width: auto; justify-content: flex-end; padding-bottom: 12vh; }
+      .gate .wm { left: 24px; }
+      .main { grid-template-columns: minmax(0, 1fr); padding: 8px 16px 48px; }   /* minmax(0,…)：长网址不能把列撑出屏幕 */
+      .top .sub { display: none; }
+      .top .wm { margin-right: auto; }
+      .top .btn { width: 40px; padding: 0; font-size: 0; gap: 0; }   /* 窄屏只留图标 */
+      .top { padding: 14px 16px; }
+      .form { position: static; max-height: none; overflow: visible; }
     }
   </style>
 </head>
 <body>
+  <div id="app"></div>
+  <div id="toast" role="status"></div>
 
-  <!-- ═══════════ LOGIN ═══════════ -->
-  <div id="loginGate">
-    <div class="login-card">
-      <div class="login-logo">
-        <span class="login-logo-mark">
-          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <defs>
-              <linearGradient id="admLoginLogoGrad" x1="5" y1="4" x2="27" y2="28" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#7dd3fc"/>
-                <stop offset="0.55" stop-color="#38bdf8"/>
-                <stop offset="1" stop-color="#818cf8"/>
-              </linearGradient>
-            </defs>
-            <path d="M6 22l10-6 10 6" stroke="url(#admLoginLogoGrad)" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" opacity="0.32"/>
-            <path d="M6 17l10-6 10 6" stroke="url(#admLoginLogoGrad)" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
-            <path d="M6 12l10-6 10 6" stroke="url(#admLoginLogoGrad)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="16" cy="24.5" r="2.35" fill="url(#admLoginLogoGrad)"/>
-          </svg>
-        </span>
-        <span id="loginPortalTitle">指引页</span>
-      </div>
-
-      <h2 class="login-title">管理后台</h2>
-      <p class="login-sub">请输入管理员密码继续</p>
-
-      <div class="login-error" id="loginErr">密码错误，请重试</div>
-
-      <div class="field">
-        <label>管理密码</label>
-        <input type="password" id="pwdInput" placeholder="输入密码…" autocomplete="current-password" />
-      </div>
-
-      <button class="btn-primary" id="loginBtn">进入管理后台 →</button>
-    </div>
-  </div>
-
-  <!-- ═══════════ ADMIN PANEL ═══════════ -->
-  <div id="adminPanel">
-    <!-- Top bar -->
-    <div class="topbar">
-      <div class="topbar-left">
-        <a href="#" class="topbar-logo" data-home-link>
-          <span class="topbar-logo-mark">
-            <svg width="18" height="18" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <defs>
-                <linearGradient id="admTopLogoGrad" x1="5" y1="4" x2="27" y2="28" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#7dd3fc"/>
-                  <stop offset="0.55" stop-color="#38bdf8"/>
-                  <stop offset="1" stop-color="#818cf8"/>
-                </linearGradient>
-              </defs>
-              <path d="M6 22l10-6 10 6" stroke="url(#admTopLogoGrad)" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" opacity="0.32"/>
-              <path d="M6 17l10-6 10 6" stroke="url(#admTopLogoGrad)" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
-              <path d="M6 12l10-6 10 6" stroke="url(#admTopLogoGrad)" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"/>
-              <circle cx="16" cy="24.5" r="2.35" fill="url(#admTopLogoGrad)"/>
-            </svg>
-          </span>
-          <span class="topbar-logo-name" id="panelTitle">指引页</span>
-        </a>
-        <span class="topbar-sep"></span>
-        <span class="topbar-title">管理后台</span>
-      </div>
-      <div class="topbar-right">
-        <a href="#" class="btn-ghost" data-home-link>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9 22 9 12 15 12 15 22"/>
-          </svg>
-          返回首页
-        </a>
-        <button class="btn-ghost btn-logout" id="logoutBtn">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          退出
-        </button>
-      </div>
-    </div>
-
-    <!-- Main layout -->
-    <div class="admin-layout">
-      <!-- Left: service list -->
-      <div>
-        <div class="list-topbar">
-          <div class="list-topbar-left">
-            <span class="section-title">服务列表</span>
-            <span class="section-count" id="listCount">共 0 个</span>
-          </div>
-          <button type="button" class="btn-new" id="btnNewSvc">＋ 新增服务</button>
-        </div>
-        <div class="svc-list" id="svcList">
-          <div class="svc-empty">
-            <div class="svc-empty-icon">📭</div>
-            <p>暂无服务，点击「新增服务」或右侧表单添加</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right: form -->
-      <div>
-        <div class="form-panel">
-          <div class="form-title">
-            <span class="form-title-dot"></span>
-            <span id="formHeading">添加服务</span>
-          </div>
-
-          <input type="hidden" id="editId" />
-
-          <div class="form-field">
-            <label class="form-label">名称<span class="form-required">*</span></label>
-            <input class="form-input" id="fName" type="text" placeholder="例如：我的网盘" />
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">访问地址<span class="form-required">*</span></label>
-            <input class="form-input" id="fUrl" type="url" placeholder="https://你的域名或内网地址" />
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">对外显示地址 <small style="font-weight:400;color:var(--text3)">（选填，留空则使用上方地址）</small></label>
-            <input class="form-input" id="fDisplayUrl" type="text" placeholder="给访客看的域名，如 app.example.com" />
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">描述</label>
-            <textarea class="form-textarea" id="fDesc" placeholder="一句话说明这个入口是做什么的（选填）"></textarea>
-          </div>
-
-          <div class="form-row">
-            <div class="form-field">
-              <label class="form-label">主题颜色</label>
-              <div class="form-color-wrap">
-                <div class="form-color-preview" id="colorPreview" onclick="document.getElementById('colorPicker').click()">
-                  <span class="color-swatch" id="colorSwatch"></span>
-                  <span id="colorHex">#c8ff00</span>
-                </div>
-                <input type="color" id="colorPicker" value="#c8ff00" />
-              </div>
-            </div>
-            <div class="form-field">
-              <label class="form-label">图标 <small style="font-weight:400;color:var(--text3)">（选填）</small></label>
-              <input class="form-input emoji-input" id="fIcon" type="text" maxlength="8" placeholder="可选，如 📦" />
-            </div>
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">标签</label>
-            <input class="form-input" id="fTags" type="text" placeholder="工作, 工具" />
-            <p class="form-hint">用逗号分隔</p>
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">封面意象</label>
-            <select class="form-select" id="fMotif">
-              <option value="">自动 — 按名称和简介判断</option>
-              <option value="flow">流动 — 默认的液态金属</option>
-              <option value="exchange">对冲 — 两股液流上下对冲（交换 / 同步）</option>
-              <option value="strata">层流 — 一行行平行流动（日志 / 记录）</option>
-              <option value="ripple">波纹 — 从中心荡开（消息 / 通知）</option>
-              <option value="steps">台阶 — 一层层堆叠（资源 / 文件）</option>
-            </select>
-            <p class="form-hint">首页封面按这个形态生成；没写简介的入口建议手选</p>
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">状态</label>
-            <select class="form-select" id="fStatus">
-              <option value="active">● 运行中 — 正常显示</option>
-              <option value="inactive">○ 停用 — 灰显不可点</option>
-            </select>
-          </div>
-
-          <div class="form-actions">
-            <button class="btn-submit" id="submitBtn">添加服务</button>
-            <button class="btn-cancel" id="cancelBtn">取消</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast -->
-  <div id="toast"></div>
-
+  <script src="liquid.js"></script>
   <script>
-    (function () {
-      const m = location.pathname.match(/^(\/[^/]+)/);
-      if (!m || m[1] === '/') {
-        window.__HP_API_PREFIX__ = '';
-        return;
-      }
-      const seg = m[1];
-      if (/\.[a-zA-Z0-9]+$/.test(seg)) {
-        window.__HP_API_PREFIX__ = '';
-        return;
-      }
-      window.__HP_API_PREFIX__ = seg;
-    })();
+    const { kindOf, MOTIFS, motifOf, loop, liquid, covers } = window.HP;
+    /* ---- 可调参数 ---- */
+    const ARM_MS = 3000;            // 两步确认：按一下进待确认态，这么久不按自动回落
+    const PREVIEW_DEBOUNCE = 120;   // 表单输入后多久重算预览的字形纹理
+    const LIQUID_RES = 0.6;         // 登录页液体画布分辨率（相对 CSS 像素）
 
-    function hpApi(p) {
-      const x = String(p || '');
-      const pref = window.__HP_API_PREFIX__ || '';
-      if (!pref) return x.startsWith('/') ? x : '/' + x;
-      return (pref + (x.startsWith('/') ? x : '/' + x)).replace(/\/+/g, '/');
-    }
+    const PREFIX = (() => { const m = location.pathname.match(/^(\/[^/]+)/); return m && !/\.[a-z0-9]+$/i.test(m[1]) ? m[1] : ''; })();
+    const apiPath = p => PREFIX + p;
+    const $ = (s, el = document) => el.querySelector(s);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ICON = {
+      up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
+      down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+      del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
+      home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+      out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>',
+      plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    };
 
-    // ── State ─────────────────────────────────────────────────────────────────
     let token = sessionStorage.getItem('portal_token') || '';
+    let title = '入口';
     let services = [];
-    let editingId = null;
 
-    // ── Utilities ─────────────────────────────────────────────────────────────
-    function toast(msg, type = 'success') {
-      const el = document.getElementById('toast');
-      el.textContent = msg;
-      el.className = `show ${type}`;
-      clearTimeout(el._t);
-      el._t = setTimeout(() => { el.className = ''; }, 3000);
-    }
-
-    function api(method, path, body) {
-      const pref = window.__HP_API_PREFIX__ || '';
-      const url = pref ? (pref + (path.startsWith('/') ? path : '/' + path)).replace(/\/+/g, '/') : path;
-      return fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+    /* ---- 小件 ---- */
+    let toastT;
+    function toast(msg, type = '') { const t = $('#toast'); t.textContent = msg; t.className = 'show ' + type; clearTimeout(toastT); toastT = setTimeout(() => { t.className = type; }, 2400); }
+    async function api(method, path, body) {
+      const r = await fetch(apiPath(path), {
+        method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: body ? JSON.stringify(body) : undefined,
-      }).then(r => r.json());
+      });
+      const data = await r.json();
+      if (r.status === 401 && token) { token = ''; sessionStorage.removeItem('portal_token'); showGate(); throw new Error('登录已过期，请重新登录'); }
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      return data;
+    }
+    /* 两步确认：第一下变红换字，ARM_MS 内再按才执行；离开焦点或超时回落 */
+    function twoStep(btn, armedHTML, action) {
+      if (btn.classList.contains('armed')) { clearTimeout(btn._t); btn.classList.remove('armed'); btn.innerHTML = btn._idle; action(); return; }
+      btn._idle = btn.innerHTML; btn.classList.add('armed'); btn.innerHTML = armedHTML;
+      const back = () => { clearTimeout(btn._t); if (btn.classList.contains('armed')) { btn.classList.remove('armed'); btn.innerHTML = btn._idle; } };
+      btn._t = setTimeout(back, ARM_MS); btn.addEventListener('blur', back, { once: true });
+    }
+    function goHome(e) {
+      e?.preventDefault();
+      const path = PREFIX ? PREFIX + '/' : '/';
+      if (window.parent !== window) window.parent.location.href = path; else location.href = path;
+    }
+    function playEnter(el) { if (reduced) return; el.classList.add('enter'); void el.offsetWidth; requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('enter'))); }
+
+    /* ================= 登录 ================= */
+    let gateStop = null;
+    function showGate() {
+      unmountPanel();
+      $('#app').innerHTML = `<div class="gate"><span class="wm">ooooxo</span><div class="art"><canvas></canvas></div>
+        <div class="side"><div class="eyebrow">管理后台</div><h1>${esc(title)}</h1>
+          <form id="loginForm"><input class="in" id="pwd" type="password" placeholder="管理密码" autocomplete="current-password" required />
+            <button class="btn p" type="submit">进入</button><div class="err" id="err"></div></form></div></div>`;
+      const gate = $('.gate'), art = $('.art', gate), cv = $('canvas', gate);
+      playEnter(gate);
+      const k = Math.min(devicePixelRatio || 1, 1.5) * LIQUID_RES;
+      cv.width = Math.round(art.clientWidth * k); cv.height = Math.round(art.clientHeight * k);
+      const L = liquid(cv);
+      if (L) {
+        // 登录页的液面压进站名；形态取「流动」
+        const p = L.params({ name: title, url: '', description: '', motif: 'flow' });
+        const stop = loop((dt, now) => L.draw(reduced ? 20 : now / 1000, p, p, 0));
+        gateStop = () => { stop(); L.dispose(); };
+      } else console.error('WebGL 不可用：登录页背景不渲染');
+      $('#pwd').focus();
+      $('#loginForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const pwd = $('#pwd').value.trim(); if (!pwd) return;
+        try {
+          const data = await api('POST', '/api/auth', { password: pwd });
+          token = data.token; sessionStorage.setItem('portal_token', token);
+          gate.classList.add('leave'); setTimeout(showPanel, reduced ? 0 : 420);
+        } catch (err) {
+          $('#err').textContent = err.message === '密码错误' ? '密码不对，再试一次' : err.message;
+          $('#pwd').value = ''; $('#pwd').focus();
+          gate.classList.remove('shake'); void gate.offsetWidth; gate.classList.add('shake');
+        }
+      });
     }
 
-    // ── Color picker ──────────────────────────────────────────────────────────
-    const colorPicker  = document.getElementById('colorPicker');
-    const colorSwatch  = document.getElementById('colorSwatch');
-    const colorHexEl   = document.getElementById('colorHex');
+    /* ================= 管理面 ================= */
+    let panelStop = null, editing = null, form = null;
+    const EMPTY = { name: '', url: '', displayUrl: '', description: '', tags: [], motif: '', color: '', status: 'active' };
+    const COLOR_AUTO = '';
 
-    function setColor(hex) {
-      colorPicker.value = hex;
-      colorSwatch.style.background = hex;
-      colorHexEl.textContent = hex;
-    }
-    setColor('#c8ff00');
-    colorPicker.addEventListener('input', () => setColor(colorPicker.value));
-
-    // ── Portal title & 首页链接（子路径部署 / iframe 内返回父页）────────────────
-    function goHome(ev) {
-      if (ev) ev.preventDefault();
-      const pref = window.__HP_API_PREFIX__ || '';
-      const path = pref ? (pref + '/') : '/';
-      if (window.parent && window.parent !== window) {
-        window.parent.location.href = path;
-      } else {
-        window.location.href = path;
-      }
-    }
-    document.querySelectorAll('[data-home-link]').forEach(el => {
-      el.setAttribute('href', hpApi('/'));
-      el.addEventListener('click', goHome);
-    });
-
-    fetch(hpApi('/api/config')).then(r => r.json()).then(cfg => {
-      if (cfg.title) {
-        ['loginPortalTitle', 'panelTitle'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el) el.textContent = cfg.title;
-        });
-        document.title = cfg.title + ' — 管理后台';
-      }
-    }).catch(() => {});
-
-    // ── Login ─────────────────────────────────────────────────────────────────
-    async function tryLogin() {
-      const pwd = document.getElementById('pwdInput').value.trim();
-      if (!pwd) return;
-
-      let data;
-      try {
-        data = await api('POST', '/api/auth', { password: pwd });
-      } catch {
-        data = {};
-      }
-      if (data.token) {
-        token = data.token;
-        sessionStorage.setItem('portal_token', token);
-        document.getElementById('loginErr').classList.remove('show');
-        showAdmin();
-      } else {
-        document.getElementById('loginErr').classList.add('show');
-        document.getElementById('pwdInput').value = '';
-        document.getElementById('pwdInput').focus();
-      }
+    function unmountPanel() { panelStop?.(); panelStop = null; gateStop?.(); gateStop = null; }
+    async function showPanel() {
+      unmountPanel();
+      $('#app').innerHTML = `<div class="panel">
+        <header class="top"><span class="wm">ooooxo</span><span class="sub">管理后台 · ${esc(title)}</span>
+          <a class="btn g" href="${PREFIX}/" id="home" aria-label="返回首页">${ICON.home}返回首页</a><button class="btn g" id="logout" aria-label="退出">${ICON.out}退出</button></header>
+        <div class="main">
+          <section><div class="sec-head"><h2>入口</h2><span class="cnt num" id="cnt"></span><button class="btn g" id="new">${ICON.plus}新增</button></div><div class="list" id="list"></div></section>
+          <aside class="form" id="form"></aside>
+        </div></div>`;
+      requestAnimationFrame(() => $('.panel').classList.add('on'));
+      $('#home').addEventListener('click', goHome);
+      $('#logout').addEventListener('click', e => twoStep(e.currentTarget, `${ICON.out}再按退出`, () => { token = ''; sessionStorage.removeItem('portal_token'); showGate(); }));
+      $('#new').addEventListener('click', () => edit(null));
+      mountForm();
+      try { services = await api('GET', '/api/services'); } catch (e) { toast(e.message, 'error'); return; }
+      renderList(true);
+      edit(null);
     }
 
-    document.getElementById('loginBtn').addEventListener('click', tryLogin);
-    document.getElementById('pwdInput').addEventListener('keydown', e => {
-      if (e.key === 'Enter') tryLogin();
-    });
-
-    // ── Show admin panel ───────────────────────────────────────────────────────
-    function showAdmin() {
-      document.getElementById('loginGate').style.display = 'none';
-      document.getElementById('adminPanel').style.display = 'block';
-      loadServices();
+    function renderList(enter = false) {
+      const list = $('#list'); if (!list) return;
+      $('#cnt').textContent = String(services.length).padStart(2, '0');
+      if (!services.length) { list.innerHTML = '<div class="empty">还没有入口，右侧填好就能添加第一个</div>'; return; }
+      const imgs = covers(services);
+      list.innerHTML = services.map((s, i) => {
+        const k = kindOf(s.url), off = s.status === 'inactive';
+        return `<div class="row${off ? ' off' : ''}${editing === s.id ? ' on' : ''}" data-id="${s.id}" role="button" tabindex="0" style="--d:${Math.min(i, 10) * 45}ms">
+          <span class="thumb">${imgs[i] ? `<img src="${imgs[i]}" alt="">` : ''}</span>
+          <span class="info"><span class="nm">${esc(s.name)}</span>
+            <span class="meta"><span class="kind ${k.cls}">${k.label}</span>${s.displayUrl ? `<span class="pill">${esc(s.displayUrl)}</span>` : ''}${off ? '<span class="pill off">停用</span>' : ''}<span class="url">${esc(s.url.replace(/^https?:\/\//, ''))}</span></span></span>
+          <span class="acts">
+            <button class="gl" data-a="up" aria-label="上移" ${i === 0 ? 'disabled' : ''}>${ICON.up}</button>
+            <button class="gl" data-a="down" aria-label="下移" ${i === services.length - 1 ? 'disabled' : ''}>${ICON.down}</button>
+            <button class="gl" data-a="del" aria-label="删除">${ICON.del}</button></span></div>`;
+      }).join('');
+      if (enter) playEnter(list);
     }
 
-    // If token exists, skip login
-    if (token) {
-      api('GET', '/api/services').then(data => {
-        if (!data.error) showAdmin();
-        else { token = ''; sessionStorage.removeItem('portal_token'); }
-      }).catch(() => {});
-    }
-
-    // ── Logout ────────────────────────────────────────────────────────────────
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      if (!confirm('确定要退出管理后台吗？退出后需要重新输入密码登录。')) return;
-      token = ''; sessionStorage.removeItem('portal_token');
-      document.getElementById('loginGate').style.display = 'flex';
-      document.getElementById('adminPanel').style.display = 'none';
-    });
-
-    // ── Load & render services ────────────────────────────────────────────────
-    async function loadServices() {
-      const data = await api('GET', '/api/services');
-      services = Array.isArray(data) ? data : [];
+    async function move(id, dir) {
+      const i = services.findIndex(s => s.id === id), j = i + dir;
+      if (j < 0 || j >= services.length) return;
+      [services[i], services[j]] = [services[j], services[i]];
       renderList();
+      try { await api('PUT', '/api/reorder', { ids: services.map(s => s.id) }); } catch (e) { toast(e.message, 'error'); }
+    }
+    async function remove(id) {
+      const s = services.find(x => x.id === id);
+      try { await api('DELETE', `/api/services/${id}`); } catch (e) { toast(e.message, 'error'); return; }
+      services = services.filter(x => x.id !== id);
+      if (editing === id) edit(null);
+      renderList(); toast(`「${s.name}」已删除`);
     }
 
-    function renderList() {
-      const list = document.getElementById('svcList');
-      document.getElementById('listCount').textContent = `共 ${services.length} 个`;
+    document.addEventListener('click', e => {
+      const row = e.target.closest('.row'); if (!row) return;
+      const a = e.target.closest('[data-a]')?.dataset.a, id = row.dataset.id;
+      if (a === 'up') return move(id, -1);
+      if (a === 'down') return move(id, 1);
+      if (a === 'del') return twoStep(e.target.closest('[data-a]'), '再按删除', () => remove(id));
+      edit(id);
+    });
+    document.addEventListener('keydown', e => { const row = e.target.closest?.('.row'); if (row && e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); edit(row.dataset.id); } });
 
-      if (!services.length) {
-        list.innerHTML = `
-          <div class="svc-empty">
-            <div class="svc-empty-icon">📭</div>
-            <p>暂无服务，在右侧表单添加</p>
-          </div>`;
-        return;
-      }
-
-      list.innerHTML = services.map((s, i) => `
-        <div class="svc-item" role="button" tabindex="0" style="animation: itemIn 0.3s ${i * 0.05}s ease both"
-             onclick="startEdit('${s.id}')"
-             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();startEdit('${s.id}');}">
-          <span class="svc-color-bar" style="background:${s.color || '#c8ff00'}"></span>
-          <span class="svc-icon">${s.icon ? s.icon : '◇'}</span>
-          <div class="svc-info">
-            <div class="svc-name">${s.name}</div>
-            <div class="svc-url">${(s.displayUrl && String(s.displayUrl).trim()) || s.url}</div>
-          </div>
-          <span class="svc-status-badge ${s.status || 'active'}">${s.status === 'inactive' ? '停用' : '运行中'}</span>
-          <div class="svc-actions" onclick="event.stopPropagation()">
-            <div class="order-btns">
-              <button type="button" class="order-btn" onclick="event.stopPropagation(); moveUp('${s.id}')" title="上移">▲</button>
-              <button type="button" class="order-btn" onclick="event.stopPropagation(); moveDown('${s.id}')" title="下移">▼</button>
-            </div>
-            <button type="button" class="icon-btn del" onclick="event.stopPropagation(); deleteSvc('${s.id}')" title="删除">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                <path d="M10 11v6m4-6v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-              </svg>
-            </button>
-          </div>
+    /* ---- 表单：顶部是实时封面预览（同一个 shader），改名称 / 简介 / 意象 / 颜色立刻看到 ---- */
+    function mountForm() {
+      const f = $('#form');
+      f.innerHTML = `<div class="preview"><canvas width="480" height="320"></canvas><div class="cap" id="cap"></div></div>
+        <h3><span class="dot"></span><span id="fh"></span></h3>
+        <div class="field"><label>名称<span class="req">*</span></label><input class="in" id="fName" placeholder="例如：Morii" /></div>
+        <div class="field"><label>访问地址<span class="req">*</span></label><input class="in" id="fUrl" type="url" placeholder="https://…" /></div>
+        <div class="two">
+          <div class="field"><label>短标签</label><input class="in" id="fDisplayUrl" placeholder="如 V1.2.0" /></div>
+          <div class="field"><label>标签</label><input class="in" id="fTags" placeholder="工具, 工作" /></div>
         </div>
-      `).join('');
-    }
+        <div class="field"><label>简介</label><textarea class="in" id="fDesc" placeholder="一句话说明它是做什么的（也用来判断封面意象）"></textarea></div>
+        <div class="field"><label>封面意象</label><div class="seg" id="fMotif">
+          <button type="button" data-v="">自动</button>${Object.entries(MOTIFS).map(([k, m]) => `<button type="button" data-v="${k}">${m.word}</button>`).join('')}</div>
+          <span class="hint" id="motifHint"></span></div>
+        <div class="two">
+          <div class="field"><label>高光色</label><div class="seg" id="fColor"><button type="button" data-v="auto">自动</button><button type="button" data-v="pick"><span class="sw" id="sw"></span><span id="hex">自选</span></button></div>
+            <input class="color-in" id="colorIn" type="color" value="#38bdf8" /></div>
+          <div class="field"><label>状态</label><div class="seg" id="fStatus"><button type="button" data-v="active">启用</button><button type="button" data-v="inactive">停用</button></div></div>
+        </div>
+        <div class="acts"><button class="btn p" id="save"></button><button class="btn g" id="cancel">取消</button></div>`;
+      const cv = $('.preview canvas', f), L = liquid(cv);
+      let P = null, previewT;
+      const repaint = () => { if (!L) return; P = L.params(read()); };
+      const schedule = () => { clearTimeout(previewT); previewT = setTimeout(() => { repaint(); caption(); }, PREVIEW_DEBOUNCE); };
+      if (L) panelStop = loop((dt, now) => { if (P) L.draw(reduced ? 20 : now / 1000, P, P, 0); });
+      const prevStop = panelStop; panelStop = () => { prevStop?.(); L?.dispose(); };
 
-    // ── Form helpers ──────────────────────────────────────────────────────────
-    function resetForm() {
-      editingId = null;
-      document.getElementById('editId').value = '';
-      document.getElementById('fName').value = '';
-      document.getElementById('fUrl').value = '';
-      document.getElementById('fDisplayUrl').value = '';
-      document.getElementById('fDesc').value = '';
-      document.getElementById('fIcon').value = '';
-      document.getElementById('fTags').value = '';
-      document.getElementById('fStatus').value = 'active';
-      document.getElementById('fMotif').value = '';
-      setColor('#c8ff00');
-      document.getElementById('formHeading').textContent = '添加服务';
-      document.getElementById('submitBtn').textContent = '添加服务';
-      document.getElementById('cancelBtn').classList.remove('show');
-    }
-
-    function startEdit(id) {
-      const s = services.find(x => x.id === id);
-      if (!s) return;
-      editingId = id;
-      document.getElementById('editId').value = id;
-      document.getElementById('fName').value = s.name;
-      document.getElementById('fUrl').value = s.url;
-      document.getElementById('fDisplayUrl').value = s.displayUrl || '';
-      document.getElementById('fDesc').value = s.description || '';
-      document.getElementById('fIcon').value = s.icon || '';
-      document.getElementById('fTags').value = (s.tags || []).join(', ');
-      document.getElementById('fStatus').value = s.status || 'active';
-      document.getElementById('fMotif').value = s.motif || '';
-      setColor(s.color || '#c8ff00');
-      document.getElementById('formHeading').textContent = '编辑服务';
-      document.getElementById('submitBtn').textContent = '保存修改';
-      document.getElementById('cancelBtn').classList.add('show');
-      // Scroll form into view on mobile
-      document.querySelector('.form-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    document.getElementById('cancelBtn').addEventListener('click', resetForm);
-
-    document.getElementById('btnNewSvc').addEventListener('click', () => {
-      resetForm();
-      document.querySelector('.form-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-
-    // ── Submit ────────────────────────────────────────────────────────────────
-    document.getElementById('submitBtn').addEventListener('click', async () => {
-      const name = document.getElementById('fName').value.trim();
-      const url  = document.getElementById('fUrl').value.trim();
-      if (!name || !url) { toast('名称和地址为必填项', 'error'); return; }
-
-      const body = {
-        name,
-        url,
-        displayUrl:  document.getElementById('fDisplayUrl').value.trim(),
-        description: document.getElementById('fDesc').value.trim(),
-        icon:        document.getElementById('fIcon').value.trim(),
-        color:       colorPicker.value,
-        tags:        document.getElementById('fTags').value.split(/[,，]/).map(t => t.trim()).filter(Boolean),
-        status:      document.getElementById('fStatus').value,
-        motif:       document.getElementById('fMotif').value,
-      };
-
-      let data;
-      if (editingId) {
-        data = await api('PUT', `/api/services/${editingId}`, body);
-      } else {
-        data = await api('POST', '/api/services', body);
+      function segSet(id, v) { $(`#${id}`).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v))); }
+      function caption() {
+        const s = read(), m = motifOf(s), k = kindOf(s.url);
+        $('#cap').innerHTML = `<b>${esc(s.name || '未命名')}</b><span>${k.label} · ${m.word}</span>`;
+        $('#motifHint').textContent = s.motif ? `手选：${m.why}` : `自动判断为「${m.word}」：${m.why}`;
       }
-
-      if (data.error) { toast(data.error, 'error'); return; }
-
-      toast(editingId ? `"${data.name}" 已更新` : `"${data.name}" 已添加`);
-      resetForm();
-      loadServices();
-    });
-
-    // ── Delete ────────────────────────────────────────────────────────────────
-    async function deleteSvc(id) {
-      const s = services.find(x => x.id === id);
-      const name = s ? s.name : '';
-      if (!confirm(name ? `确认删除「${name}」？` : '确认删除？')) return;
-      const data = await api('DELETE', `/api/services/${id}`);
-      if (data.error) { toast(data.error, 'error'); return; }
-      toast(name ? `「${name}」已删除` : '已删除');
-      if (editingId === id) resetForm();
-      loadServices();
+      form = {
+        state: { ...EMPTY },
+        fill(s) {
+          this.state = { ...EMPTY, ...s, tags: [...(s.tags || [])] };
+          $('#fName').value = this.state.name; $('#fUrl').value = this.state.url; $('#fDisplayUrl').value = this.state.displayUrl || '';
+          $('#fTags').value = this.state.tags.join(', '); $('#fDesc').value = this.state.description || '';
+          segSet('fMotif', this.state.motif || ''); segSet('fStatus', this.state.status || 'active');
+          this.setColor(this.state.color || COLOR_AUTO);
+          repaint(); caption();
+        },
+        setColor(c) {
+          // 旧数据里的默认荧光绿等于「没选过」，显示成自动
+          this.state.color = c && c.toLowerCase() !== '#c8ff00' ? c : COLOR_AUTO;
+          const auto = !this.state.color;
+          segSet('fColor', auto ? 'auto' : 'pick');
+          $('#sw').style.background = auto ? 'conic-gradient(#38bdf8, #34d399, #818cf8, #38bdf8)' : this.state.color;
+          $('#hex').textContent = auto ? '自选' : this.state.color;
+        },
+      };
+      function read() {
+        return { ...form.state, name: $('#fName').value.trim(), url: $('#fUrl').value.trim(), displayUrl: $('#fDisplayUrl').value.trim(),
+          description: $('#fDesc').value.trim(), tags: $('#fTags').value.split(/[,，]/).map(t => t.trim()).filter(Boolean) };
+      }
+      f.addEventListener('input', e => { if (e.target.id === 'colorIn') { form.setColor(e.target.value); } schedule(); });
+      f.addEventListener('click', e => {
+        const b = e.target.closest('.seg button'); if (!b) return;
+        const seg = b.parentElement.id, v = b.dataset.v;
+        if (seg === 'fMotif') { form.state.motif = v; segSet('fMotif', v); }
+        if (seg === 'fStatus') { form.state.status = v; segSet('fStatus', v); }
+        if (seg === 'fColor') { if (v === 'auto') form.setColor(COLOR_AUTO); else { $('#colorIn').value = form.state.color || '#38bdf8'; $('#colorIn').click(); } }
+        schedule();
+      });
+      $('#cancel').addEventListener('click', () => edit(null));
+      $('#save').addEventListener('click', save);
+      f.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') save(); });
     }
 
-    // ── Reorder ───────────────────────────────────────────────────────────────
-    function moveUp(id) {
-      const idx = services.findIndex(s => s.id === id);
-      if (idx <= 0) return;
-      [services[idx - 1], services[idx]] = [services[idx], services[idx - 1]];
-      services.forEach((s, i) => s.order = i);
-      renderList();
-      api('PUT', '/api/reorder', { ids: services.map(s => s.id) });
+    function edit(id) {
+      editing = id;
+      const s = id ? services.find(x => x.id === id) : EMPTY;
+      form.fill(s);
+      $('#fh').textContent = id ? '编辑入口' : '新增入口';
+      $('#save').textContent = id ? '保存修改' : '添加';
+      $('#cancel').hidden = !id;
+      document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === id));
+      if (id && matchMedia('(max-width: 900px)').matches) $('#form').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+      if (!id) $('#fName').focus({ preventScroll: true });
     }
 
-    function moveDown(id) {
-      const idx = services.findIndex(s => s.id === id);
-      if (idx >= services.length - 1) return;
-      [services[idx], services[idx + 1]] = [services[idx + 1], services[idx]];
-      services.forEach((s, i) => s.order = i);
-      renderList();
-      api('PUT', '/api/reorder', { ids: services.map(s => s.id) });
+    async function save() {
+      const s = { ...form.state, name: $('#fName').value.trim(), url: $('#fUrl').value.trim(), displayUrl: $('#fDisplayUrl').value.trim(),
+        description: $('#fDesc').value.trim(), tags: $('#fTags').value.split(/[,，]/).map(t => t.trim()).filter(Boolean) };
+      if (!s.name || !s.url) { toast('名称和访问地址都要填', 'error'); (s.name ? $('#fUrl') : $('#fName')).focus(); return; }
+      const body = { name: s.name, url: s.url, displayUrl: s.displayUrl, description: s.description, tags: s.tags, motif: s.motif, color: s.color, status: s.status };
+      $('#save').disabled = true;
+      try {
+        const data = editing ? await api('PUT', `/api/services/${editing}`, body) : await api('POST', '/api/services', body);
+        if (editing) services = services.map(x => (x.id === data.id ? data : x)); else services = [...services, data];
+        toast(editing ? `「${data.name}」已保存` : `「${data.name}」已添加`);
+        renderList(); edit(data.id);
+      } catch (e) { toast(e.message, 'error'); }
+      finally { $('#save').disabled = false; }
     }
+
+    /* ================= 启动 ================= */
+    fetch(apiPath('/api/config')).then(r => r.json()).then(c => { if (c.title) { title = c.title; document.title = `${c.title} — 管理后台`; } })
+      .finally(() => {
+        if (!token) return showGate();
+        api('GET', '/api/auth/check').then(() => showPanel(), () => showGate());
+      });
   </script>
 </body>
 </html>

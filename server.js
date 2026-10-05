@@ -87,6 +87,9 @@ r.post('/api/auth', (req, res) => {
   res.json({ token });
 });
 
+// 会话是否还有效（管理页启动时用：列表接口是公开的，不能拿它判断登录态）
+r.get('/api/auth/check', auth, (_req, res) => res.json({ ok: true }));
+
 // List services (public)
 r.get('/api/services', (_req, res) => {
   const services = load().sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999));
@@ -106,7 +109,7 @@ r.post('/api/services', auth, (req, res) => {
     displayUrl:  (displayUrl || '').trim(),
     description: (description || '').trim(),
     icon:        (icon != null && String(icon).trim()) ? String(icon).trim() : '',
-    color:       color || '#c8ff00',
+    color:       color || '',   // 空 = 自动：首页封面高光走类型色
     tags:        Array.isArray(tags) ? tags.map(t => t.trim()).filter(Boolean) : [],
     status:      status || 'active',
     motif:       MOTIF_IDS.has(motif) ? motif : '',
