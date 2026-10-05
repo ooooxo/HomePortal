@@ -1,7 +1,7 @@
 /*
  * liquid.js —— 首页与管理页共用的「入口语义 + 液体封面」模块。
  * 干什么：类型 / 意象 / 系列的推断，液体 shader（PC 实时大图、登录页背景），静态封面（手机环、缩略带、管理页列表与预览）。
- * 怎么用：<script src="liquid.js"></script> 后用 window.HP.*；封面关联方式由 HP.COVER_MODE 决定。
+ * 怎么用：<script src="liquid.js"></script> 后用 window.HP.*；封面关联方式改本文件的 COVER_MODE。
  * 需要什么：浏览器 WebGL；没有 WebGL 时 HP.liquid() 返回 null、HP.covers() 返回空串，调用方照常工作。
  */
 (function () {
@@ -158,5 +158,5 @@ void main() {
 
 
     // 只导出两页真用到的：首页（单幅）与管理页（列表封面、预览、登录背景）
-    window.HP = { COVER_MODE, kindOf, MOTIFS, motifOf, EASE_IN_OUT, spring, loop, liquid, covers };
+    window.HP = { kindOf, MOTIFS, motifOf, EASE_IN_OUT, spring, loop, liquid, covers };
 })();

@@ -59,12 +59,14 @@
     .pc .count b { color: var(--ink); font-weight: 500; }
     .pc h1 { margin: 0; font-size: clamp(48px, 5.8vw, 92px); line-height: 1.02; font-weight: 650; letter-spacing: -0.045em; }
     .pc .desc { font-size: 16px; line-height: 1.6; color: var(--ink-2); max-width: 420px; min-height: 26px; }
-    .pc .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pc .chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: rgba(255, 255, 255, .07); color: var(--ink-2); }
+    /* 右上角胶囊：类型 / 短标签 / 标签 / 停用，挂在分享与管理图标下方、右对齐 */
+    .pc .tags { position: absolute; right: 40px; top: 82px; z-index: 20; max-width: 46%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px;
+      transition: opacity .2s var(--ease-out); }
+    .pc .tags.out { opacity: 0; }
+    .pc.mobile .tags { right: 18px; top: calc(env(safe-area-inset-top) + 60px); max-width: 70%; }
+    .pc .chip { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: rgba(12, 12, 14, .55); color: var(--ink-2); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
     .pc .chip.k { color: var(--kc); background: color-mix(in srgb, var(--kc) 14%, transparent); }
     .pc .chip.off { color: #fbbf24; background: rgba(251, 191, 36, .12); }
-    .pc .motif { font-size: 12px; color: var(--ink-3); }
-    .pc .motif b { font-weight: 500; color: var(--ink-2); }
     .pc .acts { display: flex; gap: 10px; }
     .pc .btn { height: 44px; padding: 0 20px; border-radius: 22px; border: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
       transition: background .16s var(--ease-hover), color .16s var(--ease-hover), transform .12s var(--ease-out), opacity .16s var(--ease-hover); }
@@ -85,9 +87,9 @@
     /* 进入过渡：液体从黑里浮现、轻微收拢；文字、按钮、缩略带 / 页码依次浮入。出现用 ease-out，液体浮现是 A→B 用 in-out */
     .pc .art { transition: opacity 1.6s var(--ease-in-out), transform 2.2s var(--ease-out); }
     .pc.enter .art { opacity: 0; transform: scale(1.06); }
-    .pc .brandrow, .pc .txt, .pc .acts, .pc .strip, .pc .pager { transition: opacity .8s var(--ease-out) var(--d, 0ms), transform .8s var(--ease-out) var(--d, 0ms), filter .8s var(--ease-out) var(--d, 0ms); }
-    .pc.enter .brandrow, .pc.enter .txt, .pc.enter .acts, .pc.enter .strip, .pc.enter .pager { opacity: 0; transform: translateY(18px); filter: blur(6px); }
-    .pc .brandrow { --d: 200ms; } .pc .txt { --d: 350ms; } .pc .acts { --d: 520ms; } .pc .strip, .pc .pager { --d: 700ms; }
+    .pc .brandrow, .pc .tags, .pc .txt, .pc .acts, .pc .strip, .pc .pager { transition: opacity .8s var(--ease-out) var(--d, 0ms), transform .8s var(--ease-out) var(--d, 0ms), filter .8s var(--ease-out) var(--d, 0ms); }
+    .pc.enter .brandrow, .pc.enter .tags, .pc.enter .txt, .pc.enter .acts, .pc.enter .strip, .pc.enter .pager { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+    .pc .brandrow { --d: 200ms; } .pc .tags { --d: 300ms; } .pc .txt { --d: 350ms; } .pc .acts { --d: 520ms; } .pc .strip, .pc .pager { --d: 700ms; }
 
     /* ================= 手机：同一套单幅，竖排 ================= */
     /* 高度取浏览器实际可见区（dvh）：底部有导航栏 / 工具栏时内容自动让开，按钮不会压在栏下 */
@@ -129,8 +131,8 @@
 
   <script src="liquid.js"></script>
   <script>
-    const { COVER_MODE, kindOf, motifOf, EASE_IN_OUT, spring, loop, liquid, covers } = window.HP;
-    /* ---- 可调参数（封面关联方式在 liquid.js 的 COVER_MODE） ---------------------- */
+    const { kindOf, EASE_IN_OUT, spring, loop, liquid, covers } = window.HP;
+    /* ---- 可调参数（封面关联方式在 liquid.js 的 COVER_MODE） ---- */
     const MOBILE_QUERY = '(max-width: 760px), (pointer: coarse) and (max-width: 1100px)';
     const LIQUID_RES = 0.6;          // 液体画布分辨率（相对 CSS 像素）：液体本身就柔，0.6 足够且省电
     const MOBILE_RES = 0.4;          // 手机再降一档：切换时要同时算两个入口，手机 GPU 吃不消全分辨率
@@ -181,7 +183,7 @@
 
     /* ================= 单幅（PC 与手机共用） ================= */
     function mountStage(list, mobile) {
-      $('#root').innerHTML = `<div class="pc${mobile ? ' mobile' : ''}">${brand()}<div class="art"><canvas></canvas></div>
+      $('#root').innerHTML = `<div class="pc${mobile ? ' mobile' : ''}">${brand()}<div class="tags" id="tg"></div><div class="art"><canvas></canvas></div>
         <div class="side"><div class="txt" id="tx"></div><div class="acts"><a class="btn p" id="go" ${mobile ? '' : 'target="_blank" rel="noopener noreferrer"'}>打开 ${GL.arrow}</a><button class="btn g" id="cp">复制链接</button></div>${mobile ? `<div class="pager">${list.map(() => '<i></i>').join('')}</div>` : ''}</div>
         ${mobile ? ''
                  : `<nav class="strip" aria-label="全部入口">${list.map((s, i) => `<button class="th" data-i="${i}" aria-label="${esc(s.name)}"><img alt=""></button>`).join('')}</nav>`}</div>`;
@@ -202,14 +204,16 @@
 
       /* 文字：叠化换层（PC 上下，手机按滑动方向左右） */
       function text(i, dir = 1) {
-        const s = list[i], k = kindOf(s.url), m = motifOf(s), first = cur < 0, off = s.status === 'inactive';
+        const s = list[i], k = kindOf(s.url), first = cur < 0, off = s.status === 'inactive';
         cur = i;
+        // 右上角胶囊：先淡出、换内容、再淡入
+        const tg = root.querySelector('#tg'), chips = `<span class="chip k ${k.cls}">${k.label}</span>${s.displayUrl ? `<span class="chip">${esc(s.displayUrl)}</span>` : ''}${(s.tags || []).map(t => `<span class="chip">${esc(t)}</span>`).join('')}${off ? '<span class="chip off">停用</span>' : ''}`;
+        if (first) tg.innerHTML = chips; else { tg.classList.add('out'); clearTimeout(tg._t); tg._t = setTimeout(() => { tg.innerHTML = chips; tg.classList.remove('out'); }, 200); }
         const sl = document.createElement('div');
         sl.className = 'sl' + (first ? '' : ' in');
         sl.style.setProperty('--dx', `${dir * 26}px`);
         sl.innerHTML = `<div class="count num"><b>${no(i)}</b> / ${no(list.length - 1)}</div><h1>${esc(s.name)}</h1>${s.description ? `<div class="desc">${esc(s.description)}</div>` : (mobile ? '' : '<div class="desc"></div>')}`
-          + `<div class="chips"><span class="chip k ${k.cls}">${k.label}</span>${s.displayUrl ? `<span class="chip">${esc(s.displayUrl)}</span>` : ''}${(s.tags || []).map(t => `<span class="chip">${esc(t)}</span>`).join('')}${off ? '<span class="chip off">停用</span>' : ''}</div>`
-          + (COVER_MODE.motif ? `<div class="motif">肌理 · <b>${m.word}</b>　${m.why}</div>` : '');
+          ;
         tx.querySelectorAll('.sl:not(.out)').forEach(o => { o.style.transform = ''; o.style.opacity = ''; o.style.setProperty('--dx', `${dir * 26}px`); o.classList.add('out'); setTimeout(() => o.remove(), 500); });
         tx.appendChild(sl);
         if (!first) requestAnimationFrame(() => requestAnimationFrame(() => sl.classList.remove('in')));
