@@ -153,6 +153,6 @@ void main() {
     }
 
 
-    const EASE_OUT = bezier(0.23, 1, 0.32, 1);
-    window.HP = { COVER_MODE, kindOf, MOTIFS, motifOf, baseName, hash, tintOf, bezier, EASE_IN_OUT, EASE_OUT, spring, loop, liquid, covers, textField };
+    // 只导出两页真用到的：首页（单幅）与管理页（列表封面、预览、登录背景）
+    window.HP = { COVER_MODE, kindOf, MOTIFS, motifOf, EASE_IN_OUT, spring, loop, liquid, covers };
 })();
