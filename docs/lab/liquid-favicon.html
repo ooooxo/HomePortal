@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8">
+<!-- 网页图标生成器（液体小球）。怎么跑：用浏览器打开本文件，再把 window.OUT 里的 PNG 按需导出成 favicon.png（64）/ apple-touch-icon.png（180，垫夜色底）。
+     需要：同仓 public/liquid.js。入口页 liquid.js 在 1024 画布上出液体 → 取避开字形的一块 → 裁圆 → 球面高光 / 边缘压暗。window.OUT[key] = PNG data URL（512） -->
+<script src="../../public/liquid.js"></script>
+<body style="margin:0;background:#1f1f22">
+<script>
+const OUTPX = 512, GLPX = 1024;
+function ball(entry, t, crop, boost) {
+  const gl = document.createElement('canvas'); gl.width = gl.height = GLPX;
+  const L = HP.liquid(gl, true); const p = L.params(entry); L.draw(t, p, p, 0);
+  const c = document.createElement('canvas'); c.width = c.height = OUTPX; const g = c.getContext('2d'); const r = OUTPX / 2;
+  g.save(); g.beginPath(); g.arc(r, r, r - 3, 0, Math.PI * 2); g.clip();
+  g.filter = boost;
+  g.drawImage(gl, crop[0] * GLPX, crop[1] * GLPX, crop[2] * GLPX, crop[2] * GLPX, 0, 0, OUTPX, OUTPX);
+  g.filter = 'none';
+  let h = g.createRadialGradient(r * .7, r * .6, 0, r * .7, r * .6, r * 1.05);       // 受光面
+  h.addColorStop(0, 'rgba(255,255,255,.28)'); h.addColorStop(.5, 'rgba(255,255,255,.05)'); h.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = h; g.fillRect(0, 0, OUTPX, OUTPX);
+  let s = g.createRadialGradient(r * .85, r * .8, r * .35, r, r, r);                  // 背光与边缘
+  s.addColorStop(0, 'rgba(0,0,0,0)'); s.addColorStop(.75, 'rgba(0,0,0,.22)'); s.addColorStop(1, 'rgba(0,0,0,.72)');
+  g.fillStyle = s; g.fillRect(0, 0, OUTPX, OUTPX);
+  let sp = g.createRadialGradient(r * .62, r * .5, 0, r * .62, r * .5, r * .26);       // 高光点
+  sp.addColorStop(0, 'rgba(255,255,255,.55)'); sp.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = sp; g.fillRect(0, 0, OUTPX, OUTPX);
+  g.restore();
+  g.beginPath(); g.arc(r, r, r - 4, 0, Math.PI * 2); g.strokeStyle = 'rgba(255,255,255,.16)'; g.lineWidth = 5; g.stroke();
+  L.dispose();
+  return c.toDataURL('image/png');
+}
+window.OUT = {
+  portal: ball({ name: 'ooooxo', description: '', url: '', motif: 'flow' }, 12, [0.5, 0.52, 0.46], 'brightness(1.7) contrast(1.15)'),
+  rh: ball({ name: 'Release Hub', description: '', url: '/app/releasehub', motif: 'exchange' }, 12, [0.48, 0.6, 0.4], 'brightness(1.05) contrast(1.1)'),
+};
+document.body.innerHTML = `<div style="display:flex;gap:40px;align-items:center;padding:30px">${['portal', 'rh'].map(k => `<img src="${OUT[k]}" width=180>${[64, 32, 16].map(s => `<img src="${OUT[k]}" width=${s}>`).join('')}`).join('<span style="width:30px"></span>')}</div>
+<div style="display:flex;gap:30px;align-items:center;padding:20px 30px;background:#ececee">${['portal', 'rh'].map(k => `<img src="${OUT[k]}" width=64><img src="${OUT[k]}" width=32><img src="${OUT[k]}" width=16>`).join('<span style="width:30px"></span>')}</div>`;
+</script>
